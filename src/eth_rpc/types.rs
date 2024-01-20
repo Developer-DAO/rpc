@@ -1,10 +1,14 @@
-use serde::{Serialize, Deserialize};
-use crate::{json_rpc::types::JsonRpcResponse, eth_rpc::errors::EthCallError};
-use std::future::Future; 
+use crate::{eth_rpc::errors::EthCallError, json_rpc::types::JsonRpcResponse};
+use serde::{Deserialize, Serialize};
+use std::future::Future;
 
-pub trait EthCall
-{
-    fn call(&self) -> impl Future<Output = Result<JsonRpcResponse<GetTransactionByHash>, EthCallError>> + Send;
+pub trait EthCall {
+
+    type Inner;
+
+    fn call(
+        &self,
+    ) -> impl Future<Output = Result<JsonRpcResponse<Self::Inner>, EthCallError>> + Send; 
 }
 
 pub enum Methods {
@@ -13,13 +17,13 @@ pub enum Methods {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GetTransactionByHash {
-    pub data: [u8; 32]
+    pub data: [u8; 32],
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GetTransactionByHashResult {
-    blockhash: [u8; 32], 
-    blocknumber: String, 
+    blockhash: [u8; 32],
+    blocknumber: String,
     from: [u8; 20],
     gas: String,
     gas_price: String,
@@ -29,7 +33,7 @@ pub struct GetTransactionByHashResult {
     to: [u8; 20],
     transaction_index: String,
     value: String,
-    v: String, 
+    v: String,
     r: String,
     s: String,
 }
