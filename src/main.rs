@@ -5,16 +5,18 @@ use axum::{
     Router,
 };
 use database::types::Database;
+use dotenvy::dotenv;
 use tokio::net::TcpListener;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::info;
 use tracing_subscriber::fmt::format::FmtSpan;
-
+pub mod json_rpc;
+pub mod eth_rpc;
 pub mod database;
 
 #[tokio::main]
 async fn main() {
-
+    dotenv().unwrap();
     Database::init(None).await.unwrap();
     tracing_subscriber::fmt()
         .with_span_events(FmtSpan::CLOSE)
@@ -23,7 +25,7 @@ async fn main() {
         .init();
     let cors = CorsLayer::new()
         .allow_origin(Any)
-        .allow_headers([header::CONTENT_TYPE])
+        .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION])
         .allow_methods(Any);
 
     let app = Router::new()
@@ -40,6 +42,7 @@ async fn main() {
 // routes:
 // checkhealth
 // register
+// verify_payment
 // login (for client side applications)
 // protected routes:
 // rpc_request
