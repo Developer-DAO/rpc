@@ -1,0 +1,18 @@
+[package]
+name = "dd_rpc"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+argon2 = "0.5.2"
+axum = "0.7.4"
+dotenvy = "0.15.7"
+serde = {version = "1.0.195", features = ["derive"]}
+serde_json = "1.0.111"
+sqlx = {version = "0.7.3", features = ["postgres", "macros", "runtime-tokio", "tls-rustls"]}
+tokio = {version = "1.35.1", features = ["rt-multi-thread", "macros"]}
+tower-http = {version = "0.5.1", features = ["cors"]}
+tracing = "0.1.40"
+tracing-subscriber = "0.3.18"
