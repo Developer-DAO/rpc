@@ -10,9 +10,9 @@ use tokio::net::TcpListener;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::info;
 use tracing_subscriber::fmt::format::FmtSpan;
-pub mod json_rpc;
-pub mod eth_rpc;
 pub mod database;
+pub mod eth_rpc;
+pub mod json_rpc;
 
 #[tokio::main]
 async fn main() {

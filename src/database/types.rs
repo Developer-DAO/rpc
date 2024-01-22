@@ -1,8 +1,8 @@
+use sqlx::FromRow;
+use sqlx::{migrate, PgPool, Pool, Postgres};
 use std::fmt::Display;
 use std::str::FromStr;
 use std::sync::OnceLock;
-use sqlx::FromRow;
-use sqlx::{Pool, Postgres, PgPool, migrate};
 
 use super::errors::ParsingError;
 
@@ -13,8 +13,12 @@ pub struct Database;
 impl Database {
     pub async fn init(test: Option<()>) -> Result<(), Box<dyn std::error::Error>> {
         let pool = match test {
-            Some(_) => PgPool::connect(&dotenvy::var("TESTING_DATABASE_URL").unwrap()).await.unwrap(),
-            None => PgPool::connect(&dotenvy::var("DATABASE_URL").unwrap()).await.unwrap(),
+            Some(_) => PgPool::connect(&dotenvy::var("TESTING_DATABASE_URL").unwrap())
+                .await
+                .unwrap(),
+            None => PgPool::connect(&dotenvy::var("DATABASE_URL").unwrap())
+                .await
+                .unwrap(),
         };
         migrate!("./migrations").run(&pool).await.unwrap();
         RELATIONAL_DATABASE.get_or_init(|| pool);
@@ -24,24 +28,23 @@ impl Database {
 
 #[derive(FromRow, Debug)]
 pub struct Customers {
-    email: String, 
+    email: String,
     wallet: [u8; 32],
     password: String,
 }
 
 #[derive(FromRow, Debug)]
 pub struct Payments {
-    customer_email: String, 
-    call_count: i32, 
-    subscription: Plan
+    customer_email: String,
+    call_count: i32,
+    subscription: Plan,
 }
 
 #[derive(Debug, Clone)]
 pub enum Plan {
-    None,
     Based,
-    Premier, 
-    Gigachad
+    Premier,
+    Gigachad,
 }
 
 impl Display for Plan {
@@ -51,7 +54,6 @@ impl Display for Plan {
 }
 
 impl FromStr for Plan {
-    
     type Err = ParsingError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -59,7 +61,7 @@ impl FromStr for Plan {
             "based" => Plan::Based,
             "premier" => Plan::Premier,
             "gigachad" => Plan::Gigachad,
-            _ => return Err(ParsingError)
+            _ => return Err(ParsingError),
         };
 
         Ok(plan)

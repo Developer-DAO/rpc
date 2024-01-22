@@ -1,3 +1,3 @@
-pub mod types;
-pub mod transaction;
 pub mod errors;
+pub mod transaction;
+pub mod types;
