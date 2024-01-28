@@ -4,7 +4,6 @@ use argon2::{
     Argon2, PasswordHasher,
 };
 use axum::{response::IntoResponse, Json};
-use serde_json::json;
 
 use super::{errors::ApiError, types::RegisterUser}; 
 

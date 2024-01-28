@@ -138,7 +138,7 @@ pub struct Address(String);
 
 impl Address {
     pub fn try_address(s: &str) -> Result<(), ParsingError> {
-        if s.starts_with("0x") == false {
+        if !s.starts_with("0x"){
             return Err(ParsingError(s.to_owned(), "Address"));
 
         }
@@ -147,7 +147,7 @@ impl Address {
             return Err(ParsingError(s.to_owned(), "Address"));
         }
 
-        return Ok(());
+        Ok(())
     }
 }
 
@@ -155,7 +155,7 @@ impl FromStr for Address {
     type Err = ParsingError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s.starts_with("0x") == false {
+        if !s.starts_with("0x") {
             return Err(ParsingError(s.to_owned(), "Address"));
         }
 

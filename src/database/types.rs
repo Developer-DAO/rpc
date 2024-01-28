@@ -79,7 +79,11 @@ pub enum Asset {
 
 impl Display for Plan {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self)
+        match self {
+            Plan::Based => write!(f, "based"),
+            Plan::Premier  => write!(f, "premier"),
+            Plan::Gigachad => write!(f, "gigachad"),
+        } 
     }
 }
 
@@ -100,7 +104,12 @@ impl FromStr for Plan {
 
 impl Display for Chain {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self)
+        match self {
+            Chain::Base => write!(f, "base"),
+            Chain::Polygon => write!(f, "polygon"),
+            Chain::Optimism => write!(f, "optimism"),
+            Chain::Arbitrum => write!(f, "arbitrum"),
+        }
     }
 }
 
@@ -122,7 +131,10 @@ impl FromStr for Chain {
 
 impl Display for Asset {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self)
+        match self {
+            Asset::Ether => write!(f, "ether"),
+            Asset::USDC => write!(f, "usdc")
+        }
     }
 }
 
