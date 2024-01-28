@@ -1,4 +1,6 @@
 CREATE TYPE PLAN AS ENUM('based', 'premier', 'gigachad');
+CREATE TYPE CHAIN AS ENUM('optimism', 'polygon', 'arbitrum', 'base');
+CREATE TYPE ASSET AS ENUM('ether', 'usdc');
 
 CREATE TABLE IF NOT EXISTS Customers (
     email VARCHAR(255) NOT NULL PRIMARY KEY,
@@ -6,15 +8,24 @@ CREATE TABLE IF NOT EXISTS Customers (
     password VARCHAR(120) NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS Payments (
+CREATE TABLE IF NOT EXISTS PaymentInfo (
     customerEmail VARCHAR(255) PRIMARY KEY,
     callCount int NOT NULL,
     subscription PLAN NOT NULL,
-    paymentDate TIMESTAMPTZ NOT NULL
+    planExpiration TIMESTAMPTZ NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS Api (
     customerEmail VARCHAR(255),
     apiKey VARCHAR(255),
     PRIMARY KEY(customerEmail, apiKey)
+);
+
+CREATE TABLE IF NOT EXISTS Payments (    
+    customerEmail VARCHAR(255) PRIMARY KEY,
+    transactionHash VARCHAR(120) NOT NULL UNIQUE,
+    asset ASSET NOT NULL, 
+    amount BIGINT NOT NULL,
+    chain CHAIN NOT NULL,
+    date TIMESTAMPTZ NOT NULL
 );

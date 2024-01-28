@@ -2,7 +2,7 @@ use std::fmt::{self, Display, Formatter};
 
 use hex::FromHexError;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct EthCallError {
     err: &'static dyn std::error::Error,
 }

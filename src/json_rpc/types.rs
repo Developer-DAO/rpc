@@ -1,7 +1,5 @@
 use serde::{Deserialize, Serialize};
 
-use crate::eth_rpc::types::ResultWrapper;
-
 #[derive(Debug, Serialize, Deserialize)]
 pub struct JsonRpcResponse<T> {
     pub jsonrpc: String,

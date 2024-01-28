@@ -1,6 +1,9 @@
-use crate::eth_rpc::errors::EthCallError;
+use crate::{database::errors::ParsingError, eth_rpc::errors::EthCallError};
 use axum::http::Uri;
+use crypto_bigint::U256;
+use hex::{encode, decode};
 use serde::{Deserialize, Serialize};
+use std::fmt::{Display, Formatter};
 use std::{future::Future, str::FromStr, sync::OnceLock};
 
 pub static ETHEREUM_ENDPOINT: OnceLock<Provider> = OnceLock::new();
@@ -25,7 +28,10 @@ pub enum Chains {
 pub trait EthCall {
     type Inner;
 
-    fn call(&self, provider: &Uri) -> impl Future<Output = Result<Self::Inner, EthCallError>> + Send;
+    fn call(
+        &self,
+        provider: &Uri,
+    ) -> impl Future<Output = Result<Self::Inner, EthCallError>> + Send;
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -101,17 +107,83 @@ pub struct RawGetTransactionByHashResponse {
     s: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
-pub struct TransactionData {
-    block_number: u64,
-    chain_id: u16, 
-    from: String, 
-    to: String, 
-    value: u64, 
-    // this is important -- for parsing the calldata sent to a smart
-    // contract if we are being paid in tokens 
-    input: String,
+#[derive(Debug, Clone)]
+pub struct Transfer {
+    pub to: Address,
+    pub amount: U256,
 }
+
+impl FromStr for Transfer {
+    type Err = Box<dyn std::error::Error>;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let fn_selector = &s[0..10];
+        if fn_selector != "0xa9059cbb" {
+            return Err(Box::new(ParsingError(fn_selector.to_string(), "Transfer")));
+        }
+
+        let bytes = decode(&s[2..])?;
+        let to = &bytes[16..36];
+        let amount = U256::from_be_slice(&bytes[36..]);
+        let addy = format!("{}{}", "0x", encode(to));
+        Ok(Transfer {
+            to: Address::from_str(&addy)?,
+            amount,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct Address(String);
+
+impl Address {
+    pub fn try_address(s: &str) -> Result<(), ParsingError> {
+        if s.starts_with("0x") == false {
+            return Err(ParsingError(s.to_owned(), "Address"));
+
+        }
+
+        if s.len() != 42usize {
+            return Err(ParsingError(s.to_owned(), "Address"));
+        }
+
+        return Ok(());
+    }
+}
+
+impl FromStr for Address {
+    type Err = ParsingError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.starts_with("0x") == false {
+            return Err(ParsingError(s.to_owned(), "Address"));
+        }
+
+        if s.len() != 42usize {
+            return Err(ParsingError(s.to_owned(), "Address"));
+        } 
+
+        Ok(Address(s.to_string()))
+    }
+}
+
+impl Display for Address {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+// #[derive(Debug, Clone, Serialize)]
+// pub struct TransactionData {
+//     block_number: u64,
+//     chain_id: u16,
+//     from: String,
+//     to: String,
+//     value: u64,
+//     // this is important -- for parsing the calldata sent to a smart
+//     // contract if we are being paid in tokens
+//     input: String,
+// }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Provider {
@@ -144,7 +216,24 @@ impl Provider {
         let res = args.call(&self.url).await?.result.result;
         Ok(res)
     }
-
 }
 
+#[cfg(test)]
+pub mod tests {
+   use crate::eth_rpc::types::{Address, Transfer};
+   use std::str::FromStr;
+   use crypto_bigint::U256;
 
+    #[test]
+    fn parse_transfer_calldata() -> Result<(), Box<dyn std::error::Error>>{
+        let calldata = "0xa9059cbb0000000000000000000000003f5047bdb647dc39c88625e17bdbffee905a9f4400000000000000000000000000000000000000000000011c9a62d04ed0c80000"; 
+        let expected_address = Address::from_str(&"0x3F5047BDb647Dc39C88625E17BDBffee905A9F44".to_lowercase())?; 
+        let expected_amount = U256::from_u128(5250000000000000000000u128);
+        let res = Transfer::from_str(calldata)?;
+        assert_eq!(res.to, expected_address);
+        assert_eq!(res.amount, expected_amount);
+        Ok(())
+    }
+    
+
+}
