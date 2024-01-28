@@ -27,37 +27,40 @@ impl Database {
 
 #[derive(FromRow, Debug)]
 pub struct Customers {
-    email: String,
-    wallet: String,
-    password: String,
+    pub email: String,
+    pub wallet: String,
+    pub password: String,
+    pub verificationcode: String,
+    pub activated: bool,
 }
 
 #[derive(FromRow, Debug)]
 pub struct PaymentInfo {
-    customer_email: String,
-    call_count: i32,
-    plan_expiration: i64,
-    subscription: Plan,
+    pub customer_email: String,
+    pub call_count: i32,
+    pub plan_expiration: i64,
+    pub subscription: Plan,
 }
 
 #[derive(FromRow, Debug)]
 pub struct Payments {
-    customer_email: String,
-    transaction_hash: String,
-    asset: Asset, 
-    amount: i64,
-    chain: Chain, 
-    date: OffsetDateTime,
+    pub customer_email: String,
+    pub transaction_hash: String,
+    pub asset: Asset, 
+    pub amount: i64,
+    pub chain: Chain, 
+    pub date: OffsetDateTime,
 }
 
 #[derive(FromRow, Debug)]
 pub struct Api {
-    customer_email: String, 
-    api_key: String,
+    pub customer_email: String, 
+    pub api_key: String,
 }
 
 #[derive(Debug, Clone)]
 pub enum Plan {
+    None,
     Based,
     Premier,
     Gigachad,
@@ -80,6 +83,7 @@ pub enum Asset {
 impl Display for Plan {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+           Plan::None => write!(f, "none"),
             Plan::Based => write!(f, "based"),
             Plan::Premier  => write!(f, "premier"),
             Plan::Gigachad => write!(f, "gigachad"),

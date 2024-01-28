@@ -10,6 +10,7 @@ use tokio::net::TcpListener;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::info;
 use tracing_subscriber::fmt::format::FmtSpan;
+use crate::routes::register::register_user;
 pub mod database;
 pub mod eth_rpc;
 pub mod json_rpc;
@@ -34,6 +35,7 @@ async fn main() {
             "/rpc/checkhealth",
             get(|| async { (StatusCode::OK, "GM, we are fully operational").into_response() }),
         )
+        .route("/api/register", get(()).post(register_user))
         .layer(cors);
     info!("Initialized D_D RPC on 0.0.0.0:3000");
     let listener = TcpListener::bind("0.0.0.0:3000").await.unwrap();

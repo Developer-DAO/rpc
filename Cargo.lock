@@ -344,6 +344,7 @@ dependencies = [
  "crypto-bigint",
  "dotenvy",
  "hex",
+ "rand",
  "reqwest",
  "serde",
  "serde_json",

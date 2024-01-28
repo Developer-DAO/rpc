@@ -1,16 +1,18 @@
-CREATE TYPE PLAN AS ENUM('based', 'premier', 'gigachad');
+CREATE TYPE PLAN AS ENUM('none', 'based', 'premier', 'gigachad');
 CREATE TYPE CHAIN AS ENUM('optimism', 'polygon', 'arbitrum', 'base');
 CREATE TYPE ASSET AS ENUM('ether', 'usdc');
 
 CREATE TABLE IF NOT EXISTS Customers (
     email VARCHAR(255) NOT NULL PRIMARY KEY,
     wallet VARCHAR(42) NOT NULL,
-    password VARCHAR(120) NOT NULL
+    password VARCHAR(120) NOT NULL,
+    verificationCode VARCHAR(10) NOT NULL,
+    activated bool NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS PaymentInfo (
     customerEmail VARCHAR(255) PRIMARY KEY,
-    callCount int NOT NULL,
+    callCount INT NOT NULL,
     subscription PLAN NOT NULL,
     planExpiration TIMESTAMPTZ NOT NULL
 );

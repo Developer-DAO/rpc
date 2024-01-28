@@ -6,11 +6,19 @@ pub struct ApiError {
     pub err: Box<dyn Error>,
 }
 
+impl ApiError {
+    pub fn new(err: Box<dyn Error>) -> Self {
+        Self {
+            err,
+        }
+    }
+}
+
 impl Display for ApiError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "\nAn error occured while processing your API request: \n\t{}",
+            "\nAn error occured while processing your request: \n\t{}",
             self.err,
         )?;
 

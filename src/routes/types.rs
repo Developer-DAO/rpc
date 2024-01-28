@@ -7,9 +7,9 @@ use crate::eth_rpc::types::Address;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RegisterUser {
-    email: String, 
-    wallet: String, 
-    password: String,
+    pub email: String, 
+    pub wallet: String, 
+    pub password: String,
 }
 
 impl IntoResponse for RegisterUser {
