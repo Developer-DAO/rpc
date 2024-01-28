@@ -1,59 +1,47 @@
+use hex::FromHexError;
 use std::fmt::{self, Display, Formatter};
 
-use hex::FromHexError;
-
-#[derive(Debug, Clone)]
-pub struct EthCallError {
-    err: &'static dyn std::error::Error,
+#[derive(Debug)]
+pub enum EthCallError {
+    RequestError(reqwest::Error),
+    HexDecodingError(FromHexError),
+    JsonDecodingError(serde_json::Error),
 }
 
 impl Display for EthCallError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "\nAn error occured while calling this API route: {}",
-            self.err,
-        )?;
-
-        let mut err: Option<&dyn std::error::Error> = self.err.source();
-
-        while let Some(src) = err {
-            write!(f, "\nCaused by: {}", src)?;
-            err = src.source();
+        match self {
+            EthCallError::RequestError(e) => write!(f, "{}", e),
+            EthCallError::HexDecodingError(e) => write!(f, "{}", e),
+            EthCallError::JsonDecodingError(e) => write!(f, "{}", e),
         }
-        Ok(())
     }
 }
 
 impl std::error::Error for EthCallError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self.err.source() {
-            Some(s) => Some(s),
-            None => None,
+        match self {
+            EthCallError::RequestError(e) => Some(e),
+            EthCallError::HexDecodingError(e) => Some(e), 
+            EthCallError::JsonDecodingError(e) => Some(e), 
         }
     }
 }
 
 impl From<reqwest::Error> for EthCallError {
     fn from(value: reqwest::Error) -> Self {
-        EthCallError {
-            err: Box::leak(Box::new(value)),
-        }
+        EthCallError::RequestError(value)
     }
 }
 
 impl From<FromHexError> for EthCallError {
     fn from(value: FromHexError) -> Self {
-        EthCallError {
-            err: Box::leak(Box::new(value)),
-        }
+        EthCallError::HexDecodingError(value)
     }
 }
 
 impl From<serde_json::Error> for EthCallError {
     fn from(value: serde_json::Error) -> Self {
-        EthCallError {
-            err: Box::leak(Box::new(value)),
-        }
+        EthCallError::JsonDecodingError(value)
     }
 }

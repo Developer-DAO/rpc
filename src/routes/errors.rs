@@ -1,9 +1,9 @@
 use std::{error::Error, fmt::{self, Display, Formatter}};
 use axum::{http::StatusCode, response::IntoResponse};
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct ApiError {
-    pub err: &'static dyn Error,
+    pub err: Box<dyn Error>,
 }
 
 impl Display for ApiError {
