@@ -11,6 +11,7 @@ use tower_http::cors::{Any, CorsLayer};
 use tracing::info;
 use tracing_subscriber::fmt::format::FmtSpan;
 use crate::routes::register::register_user;
+use crate::routes::types::Email;
 pub mod database;
 pub mod eth_rpc;
 pub mod json_rpc;
@@ -20,6 +21,7 @@ pub mod routes;
 async fn main() {
     dotenv().unwrap();
     Database::init(None).await.unwrap();
+    Email::init().unwrap();
     tracing_subscriber::fmt()
         .with_span_events(FmtSpan::CLOSE)
         .with_max_level(tracing::Level::INFO)

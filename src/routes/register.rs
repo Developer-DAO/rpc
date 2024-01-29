@@ -4,9 +4,18 @@ use argon2::{
     Argon2, PasswordHasher,
 };
 use axum::{http::StatusCode, response::IntoResponse, Json};
+use lettre::{
+    address::AddressError,
+    message::{header::ContentType, Mailbox},
+    transport::smtp::authentication::Credentials,
+    Message, SmtpTransport, Transport,
+};
 use rand::{rngs::ThreadRng, Rng};
 
-use super::{errors::ApiError, types::RegisterUser};
+use super::{
+    errors::ApiError,
+    types::{Email, RegisterUser, SERVER_EMAIL},
+};
 
 pub async fn register_user(
     Json(payload): Json<RegisterUser>,
@@ -22,7 +31,9 @@ pub async fn register_user(
     .await?;
 
     if let Some(_) = account {
-        return Err(ApiError::new(Box::new(RegisterUserError::AlreadyRegistered)));
+        return Err(ApiError::new(Box::new(
+            RegisterUserError::AlreadyRegistered,
+        )));
     }
 
     let hashed_pass: String = {
@@ -31,13 +42,44 @@ pub async fn register_user(
             .hash_password(&payload.password.as_bytes(), &salt)?
             .to_string()
     };
-    
+
     let verification_code: u32 = ThreadRng::default().gen();
 
-    sqlx::query!("INSERT INTO Customers(email, wallet, password, verificationCode, activated) 
+    let server_email_info: &'static Email = SERVER_EMAIL.get().unwrap();
+    let email_credentials = Credentials::new(
+        server_email_info.address.to_string(),
+        server_email_info.password.to_string(),
+    );
+
+    let server_mailbox: Mailbox = server_email_info.address.parse()?;
+    let user_email = payload.email.parse()?;
+
+    let email = Message::builder()
+        .from(server_mailbox)
+        .to(user_email)
+        .subject("D_D RPC Verification Code")
+        .header(ContentType::TEXT_PLAIN)
+        .body(format!(
+            "Your verification code is: {}",
+            verification_code.to_string()
+        ))?;
+    let mailer = SmtpTransport::relay("smtp.gmail.com")?
+        .credentials(email_credentials)
+        .build();
+
+    mailer.send(&email)?;
+
+    sqlx::query!(
+        "INSERT INTO Customers(email, wallet, password, verificationCode, activated) 
             VALUES ($1, $2, $3, $4, $5)",
-            payload.email, payload.wallet, hashed_pass, verification_code.to_string(), false,            
-    ).execute(db_connection).await?;
+        &payload.email,
+        payload.wallet,
+        hashed_pass,
+        verification_code.to_string(),
+        false,
+    )
+    .execute(db_connection)
+    .await?;
 
     Ok((StatusCode::OK, "User was successfully registered").into_response())
 }
@@ -46,7 +88,10 @@ pub async fn register_user(
 pub enum RegisterUserError {
     AlreadyRegistered,
     DatabaseError(sqlx::Error),
-    HashingError(argon2::password_hash::Error)
+    HashingError(argon2::password_hash::Error),
+    EmailAddressParsingError(AddressError),
+    EmailBuilderError(lettre::error::Error),
+    SmtpError(lettre::transport::smtp::Error),
 }
 
 impl std::fmt::Display for RegisterUserError {
@@ -58,6 +103,9 @@ impl std::fmt::Display for RegisterUserError {
             ),
             RegisterUserError::DatabaseError(e) => write!(f, "{}", e),
             RegisterUserError::HashingError(e) => write!(f, "{}", e),
+            RegisterUserError::EmailAddressParsingError(e) => write!(f, "{}", e),
+            RegisterUserError::EmailBuilderError(e) => write!(f, "{}", e),
+            RegisterUserError::SmtpError(e) => write!(f, "{}", e),
         }
     }
 }
@@ -67,7 +115,10 @@ impl std::error::Error for RegisterUserError {
         match self {
             RegisterUserError::AlreadyRegistered => None,
             RegisterUserError::DatabaseError(e) => Some(e),
-            RegisterUserError::HashingError(_) => None
+            RegisterUserError::HashingError(_) => None,
+            RegisterUserError::EmailAddressParsingError(e) => Some(e),
+            RegisterUserError::EmailBuilderError(e) => Some(e),
+            RegisterUserError::SmtpError(e) => Some(e),
         }
     }
 }
@@ -81,5 +132,23 @@ impl From<sqlx::Error> for ApiError {
 impl From<argon2::password_hash::Error> for ApiError {
     fn from(value: argon2::password_hash::Error) -> Self {
         ApiError::new(Box::new(RegisterUserError::HashingError(value)))
+    }
+}
+
+impl From<AddressError> for ApiError {
+    fn from(value: AddressError) -> Self {
+        ApiError::new(Box::new(RegisterUserError::EmailAddressParsingError(value)))
+    }
+}
+
+impl From<lettre::error::Error> for ApiError {
+    fn from(value: lettre::error::Error) -> Self {
+        ApiError::new(Box::new(RegisterUserError::EmailBuilderError(value)))
+    }
+}
+
+impl From<lettre::transport::smtp::Error> for ApiError {
+    fn from(value: lettre::transport::smtp::Error) -> Self {
+        ApiError::new(Box::new(RegisterUserError::SmtpError(value)))
     }
 }
