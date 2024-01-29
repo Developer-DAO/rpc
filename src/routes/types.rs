@@ -28,3 +28,4 @@ impl Normalize for RegisterUser {
         Ok(())
     }
 }
+

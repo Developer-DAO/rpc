@@ -6,6 +6,7 @@ use argon2::{
 use axum::{http::StatusCode, response::IntoResponse, Json};
 use rand::{rngs::ThreadRng, Rng};
 
+
 use super::{errors::ApiError, types::RegisterUser};
 
 pub async fn register_user(
@@ -30,13 +31,15 @@ pub async fn register_user(
         Argon2::default()
             .hash_password(&payload.password.as_bytes(), &salt)?
             .to_string()
+            // Will i need this salt for recreating it? or just put it in the db? 
     };
     
     let verification_code: u32 = ThreadRng::default().gen();
 
     sqlx::query!("INSERT INTO Customers(email, wallet, password, verificationCode, activated) 
             VALUES ($1, $2, $3, $4, $5)",
-            payload.email, payload.wallet, hashed_pass, verification_code.to_string(), false,            
+            payload.email, payload.wallet, hashed_pass, verification_code.to_string(), false,          
+            //I can get the hashed pass from this :)   
     ).execute(db_connection).await?;
 
     Ok((StatusCode::OK, "User was successfully registered").into_response())
