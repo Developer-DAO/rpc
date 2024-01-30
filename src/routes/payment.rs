@@ -55,7 +55,7 @@ impl std::fmt::Display for PaymentError {
         match self {
             PaymentError::PaymentNotFound => write!(f, "The user doesn't have an active payment"),
             PaymentError::DatabaseError(e) => write!(f, "{}", e),
-            PaymentError::PaymentInvalid => todo!(),
+            PaymentError::PaymentInvalid => write!(f, "The user payment is expired"),
         }
     }
 }
@@ -65,7 +65,8 @@ impl std::error::Error for PaymentError {
         match self {
             PaymentError::PaymentInvalid => None,
             PaymentError::DatabaseError(e) => Some(e),
-            PaymentError::PaymentNotFound => todo!(), // Here we need to cover the other one
+            PaymentError::PaymentNotFound => None, 
         }
     }
 }
+
