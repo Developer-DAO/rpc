@@ -65,8 +65,7 @@ impl std::error::Error for PaymentError {
         match self {
             PaymentError::PaymentInvalid => None,
             PaymentError::DatabaseError(e) => Some(e),
-            PaymentError::PaymentNotFound => None, 
+            PaymentError::PaymentNotFound => None,
         }
     }
 }
-
