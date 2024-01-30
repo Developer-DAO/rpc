@@ -7,13 +7,12 @@ pub async fn verify_payment(
     Path(user_address): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
     let db_connection = RELATIONAL_DATABASE.get().unwrap();
-
+    let utc_now = OffsetDateTime::now_utc();
     let payment_validation: Option<PaymentValidation> = sqlx::query_as!(
         PaymentValidation,
-        "SELECT PaymentInfo.planExpiration AS plan_expiration, Payments.date AS payment_date
-         FROM PaymentInfo
-         JOIN Payments ON PaymentInfo.customerEmail = Payments.customerEmail
-         WHERE Payments.customerEmail = $1",
+        "SELECT PaymentInfo.planExpiration AS plan_expiration
+        FROM PaymentInfo
+        WHERE PaymentInfo.customerEmail = $1",
         user_address
     )
     .fetch_optional(db_connection)
@@ -21,7 +20,7 @@ pub async fn verify_payment(
     .map_err(|e| ApiError::new(Box::new(PaymentError::DatabaseError(e))))?; // Handle database errors
     match payment_validation {
         Some(payment_validation) => {
-            if payment_validation.plan_expiration >= payment_validation.payment_date {
+            if payment_validation.plan_expiration >= utc_now {
                 // The payment is valid
                 Ok((StatusCode::OK, "User payment is valid").into_response())
             } else {
@@ -39,7 +38,6 @@ pub async fn verify_payment(
 #[derive(Debug)]
 struct PaymentValidation {
     plan_expiration: OffsetDateTime,
-    payment_date: OffsetDateTime,
 }
 
 // Error handling
