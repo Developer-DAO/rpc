@@ -6,7 +6,6 @@ use argon2::{
 use axum::{http::StatusCode, response::IntoResponse, Json};
 use rand::{rngs::ThreadRng, Rng};
 
-
 use super::{errors::ApiError, types::RegisterUser};
 
 pub async fn register_user(
@@ -34,7 +33,6 @@ pub async fn register_user(
     };
     
     let verification_code: u32 = ThreadRng::default().gen();
-
     sqlx::query!("INSERT INTO Customers(email, wallet, password, verificationCode, activated) 
             VALUES ($1, $2, $3, $4, $5)",
             payload.email, payload.wallet, hashed_pass, verification_code.to_string(), false,          
