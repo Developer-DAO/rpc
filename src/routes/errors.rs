@@ -1,20 +1,22 @@
-use std::{error::Error, fmt::{self, Display, Formatter}};
+use std::fmt::{self, Display, Formatter};
 use axum::{http::StatusCode, response::IntoResponse};
 
 #[derive(Debug)]
-pub struct ApiError {
-    pub err: Box<dyn Error>,
+pub struct ApiError<T> 
+where T: std::error::Error
+{
+    pub err: T,
 }
 
-impl ApiError {
-    pub fn new(err: Box<dyn Error>) -> Self {
+impl<T> ApiError<T> where T: std::error::Error  {
+    pub fn new(err: T) -> Self {
         Self {
             err,
         }
     }
 }
 
-impl Display for ApiError {
+impl<T> Display for ApiError<T> where T: std::error::Error{
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -32,7 +34,7 @@ impl Display for ApiError {
     }
 }
 
-impl std::error::Error for ApiError {
+impl<T> std::error::Error for ApiError<T> where T: std::error::Error{
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self.err.source() {
             Some(s) => Some(s),
@@ -41,7 +43,7 @@ impl std::error::Error for ApiError {
     }
 }
 
-impl IntoResponse for ApiError {
+impl<T> IntoResponse for ApiError<T> where T: std::error::Error {
     fn into_response(self) -> axum::response::Response {
         (StatusCode::INTERNAL_SERVER_ERROR, self.err.to_string()).into_response()
     }

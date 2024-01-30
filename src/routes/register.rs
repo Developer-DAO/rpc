@@ -19,7 +19,7 @@ use super::{
 
 pub async fn register_user(
     Json(payload): Json<RegisterUser>,
-) -> Result<impl IntoResponse, ApiError> {
+) -> Result<impl IntoResponse, ApiError<RegisterUserError>> {
     let db_connection = RELATIONAL_DATABASE.get().unwrap();
 
     let account: Option<Customers> = sqlx::query_as!(
@@ -30,16 +30,16 @@ pub async fn register_user(
     .fetch_optional(db_connection)
     .await?;
 
-    if let Some(_) = account {
-        return Err(ApiError::new(Box::new(
+    if account.is_some() {
+        return Err(ApiError::new(
             RegisterUserError::AlreadyRegistered,
-        )));
+        ));
     }
 
     let hashed_pass: String = {
         let salt = SaltString::generate(&mut OsRng);
         Argon2::default()
-            .hash_password(&payload.password.as_bytes(), &salt)?
+            .hash_password(payload.password.as_bytes(), &salt)?
             .to_string()
     };
 
@@ -61,7 +61,7 @@ pub async fn register_user(
         .header(ContentType::TEXT_PLAIN)
         .body(format!(
             "Your verification code is: {}",
-            verification_code.to_string()
+            verification_code
         ))?;
     let mailer = SmtpTransport::relay("smtp.gmail.com")?
         .credentials(email_credentials)
@@ -123,32 +123,32 @@ impl std::error::Error for RegisterUserError {
     }
 }
 
-impl From<sqlx::Error> for ApiError {
+impl From<sqlx::Error> for ApiError<RegisterUserError> {
     fn from(value: sqlx::Error) -> Self {
-        ApiError::new(Box::new(RegisterUserError::DatabaseError(value)))
+        ApiError::new(RegisterUserError::DatabaseError(value))
     }
 }
 
-impl From<argon2::password_hash::Error> for ApiError {
+impl From<argon2::password_hash::Error> for ApiError<RegisterUserError> {
     fn from(value: argon2::password_hash::Error) -> Self {
-        ApiError::new(Box::new(RegisterUserError::HashingError(value)))
+        ApiError::new(RegisterUserError::HashingError(value))
     }
 }
 
-impl From<AddressError> for ApiError {
+impl From<AddressError> for ApiError<RegisterUserError> {
     fn from(value: AddressError) -> Self {
-        ApiError::new(Box::new(RegisterUserError::EmailAddressParsingError(value)))
+        ApiError::new(RegisterUserError::EmailAddressParsingError(value))
     }
 }
 
-impl From<lettre::error::Error> for ApiError {
+impl From<lettre::error::Error> for ApiError<RegisterUserError> {
     fn from(value: lettre::error::Error) -> Self {
-        ApiError::new(Box::new(RegisterUserError::EmailBuilderError(value)))
+        ApiError::new(RegisterUserError::EmailBuilderError(value))
     }
 }
 
-impl From<lettre::transport::smtp::Error> for ApiError {
+impl From<lettre::transport::smtp::Error> for ApiError<RegisterUserError> {
     fn from(value: lettre::transport::smtp::Error) -> Self {
-        ApiError::new(Box::new(RegisterUserError::SmtpError(value)))
+        ApiError::new(RegisterUserError::SmtpError(value))
     }
 }

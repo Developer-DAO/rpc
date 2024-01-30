@@ -10,7 +10,7 @@ use tokio::net::TcpListener;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::info;
 use tracing_subscriber::fmt::format::FmtSpan;
-use crate::routes::register::register_user;
+use crate::routes::{register::register_user, payment::verify_subscription};
 use crate::routes::types::Email;
 pub mod database;
 pub mod eth_rpc;
@@ -38,6 +38,7 @@ async fn main() {
             get(|| async { (StatusCode::OK, "GM, we are fully operational").into_response() }),
         )
         .route("/api/register", get(()).post(register_user))
+        .route("/api/verifypayment/:emailaddress" , get(verify_subscription))
         .layer(cors);
     info!("Initialized D_D RPC on 0.0.0.0:3000");
     let listener = TcpListener::bind("0.0.0.0:3000").await.unwrap();
