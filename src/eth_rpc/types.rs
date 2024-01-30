@@ -121,7 +121,6 @@ impl FromStr for Transfer {
         if fn_selector != "0xa9059cbb" {
             return Err(Box::new(ParsingError(fn_selector.to_string(), "Transfer")));
         }
-
         let bytes = decode(&s[2..])?;
         let to = &bytes[16..36];
         let amount = U256::from_be_slice(&bytes[36..]);
