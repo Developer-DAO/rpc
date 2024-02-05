@@ -43,7 +43,7 @@ pub async fn register_user(
             .to_string()
     };
 
-    let verification_code: u32 = ThreadRng::default().gen();
+    let verification_code: u32 = ThreadRng::default().gen_range(10000000 .. 99999999);
 
     let server_email_info: &'static Email = SERVER_EMAIL.get().unwrap();
     let email_credentials = Credentials::new(

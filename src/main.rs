@@ -1,5 +1,5 @@
 use crate::routes::types::{Email, JWTKey};
-use crate::routes::{payment::verify_subscription, register::register_user, login::user_login};
+use crate::routes::{payment::verify_subscription, register::register_user, login::user_login, activate::activate_account};
 use axum::{
     http::{header, StatusCode},
     response::IntoResponse,
@@ -40,6 +40,7 @@ async fn main() {
         )
         .route("/api/register", get(()).post(register_user))
         .route("/api/verifypayment/:emailaddress", get(verify_subscription))
+        .route("/activate", get(()).post(activate_account))
         .route("/login", get(()).post(user_login))
         .layer(cors);
     info!("Initialized D_D RPC on 0.0.0.0:3000");
