@@ -132,8 +132,8 @@ impl FromStr for Transfer {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct Address(String);
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+pub struct Address(pub String);
 
 impl Address {
     pub fn try_address(s: &str) -> Result<(), ParsingError> {

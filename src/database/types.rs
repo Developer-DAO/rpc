@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 use sqlx::{migrate, PgPool, Pool, Postgres, types::time::OffsetDateTime, FromRow};
 use std::fmt::Display;
 use std::str::FromStr;
@@ -29,6 +30,7 @@ impl Database {
 pub struct Customers {
     pub email: String,
     pub wallet: String,
+    pub role: Role,
     pub password: String,
     pub verificationcode: String,
     pub activated: bool,
@@ -128,8 +130,33 @@ impl FromStr for Chain {
             "arbitrum" => Chain::Arbitrum,
             _ => return Err(ParsingError(s.to_string(), "Chain")),
         };
-
         Ok(plan)
+    }
+}
+
+#[derive(Debug, Clone, sqlx::Type, Serialize, Deserialize)]
+#[sqlx(type_name = "ROLE", rename_all = "lowercase")]
+pub enum Role {
+    Normie, 
+    Admin
+}
+
+impl From<String> for Role {
+    fn from(value: String) -> Self {
+        match value.to_lowercase().as_ref() {
+            "normie" => Role::Normie, 
+            "admin" => Role::Admin, 
+            _ => Role::Normie,
+        }
+    }
+}
+
+impl Display for Role {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Role::Normie => write!(f, "Normie"),
+            Role::Admin => write!(f, "Admin"),
+        }
     }
 }
 

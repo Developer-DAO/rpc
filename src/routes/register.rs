@@ -1,4 +1,4 @@
-use crate::database::types::{Customers, RELATIONAL_DATABASE};
+use crate::database::types::{Customers, RELATIONAL_DATABASE, Role};
 use argon2::{
     password_hash::{rand_core::OsRng, SaltString},
     Argon2, PasswordHasher,
@@ -24,7 +24,7 @@ pub async fn register_user(
 
     let account: Option<Customers> = sqlx::query_as!(
         Customers,
-        "SELECT * FROM Customers WHERE email = $1",
+        r#"SELECT email, wallet, password, activated, verificationCode, role as "role!: Role" FROM Customers WHERE email = $1"#,
         &payload.email
     )
     .fetch_optional(db_connection)
