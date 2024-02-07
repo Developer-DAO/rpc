@@ -4,3 +4,4 @@ pub mod errors;
 pub mod payment;
 pub mod login;
 pub mod activate;
+pub mod pk_login;

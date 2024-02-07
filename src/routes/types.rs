@@ -1,9 +1,8 @@
 use std::error::Error;
-
 use axum::{http::StatusCode, response::IntoResponse};
 use jwt_simple::algorithms::HS256Key;
 use serde::{Serialize, Deserialize};
-use crate::eth_rpc::types::Address;
+use crate::{database::types::Role, eth_rpc::types::Address};
 use std::sync::OnceLock;
 
 pub static JWT_KEY: OnceLock<HS256Key> = OnceLock::new();
@@ -18,6 +17,13 @@ impl JWTKey {
         JWT_KEY.get_or_init(|| key);
         Ok(())
     }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Claims {
+    pub role: Role,
+    pub email: String,
+    pub wallet: Address,
 }
 
 pub struct Email {

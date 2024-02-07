@@ -1,4 +1,4 @@
-use super::{errors::ApiError, types::JWT_KEY};
+use super::{errors::ApiError, types::{JWT_KEY, Claims}};
 use crate::{
     database::{errors::ParsingError, types::{Customers, Role, RELATIONAL_DATABASE}},
     eth_rpc::types::Address,
@@ -16,13 +16,6 @@ use std::{
 pub struct LoginRequest {
     email: String,
     password: String,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Claims {
-    role: Role,
-    email: String,
-    wallet: Address,
 }
 
 pub async fn user_login(
