@@ -1,7 +1,10 @@
+use std::borrow::{Borrow, BorrowMut};
+
 use super::errors::ApiError;
-use crate::database::types::RELATIONAL_DATABASE;
-use axum::{extract::Path, http::StatusCode, response::IntoResponse};
+use crate::{database::types::{Payments, RELATIONAL_DATABASE}, eth_rpc::types::Provider};
+use axum::{extract::Path, http::StatusCode, response::IntoResponse , Json};
 use sqlx::types::time::OffsetDateTime;
+use crate::eth_rpc::types::{Endpoints, GetTransactionByHash, ETHEREUM_ENDPOINT, Receipt};
 
 pub async fn verify_subscription(
     Path(email_address): Path<String>,
@@ -33,6 +36,19 @@ pub async fn verify_subscription(
             Err(ApiError::new(PaymentError::PaymentNotFound))
         }
     }
+}
+
+async fn submit_payment(Json(payload): Json<Payments>)-> Result<() , Box<dyn std::error::Error>>{
+    let hash = payload.transaction_hash;
+    let transaction = GetTransactionByHash::new(hash.to_owned());
+    let amount_paid = transaction.data;
+    println!("{:?}", amount_paid);
+    let provider = ETHEREUM_ENDPOINT.get().unwrap();
+    let args = GetTransactionByHash::new(hash.to_owned());
+    let transaction = provider.get_transaction_by_hash(args).await?;
+    println!("{}", transaction.value);
+    Ok(())
+    // Should be corrected to handle the response tho 
 }
 
 #[derive(Debug)]
@@ -73,3 +89,36 @@ impl From<sqlx::Error> for ApiError<PaymentError> {
         ApiError::new(PaymentError::DatabaseError(value))
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::submit_payment;
+    use crate::{database::types::{Asset, Chain, Payments}, eth_rpc::types::Endpoints};
+    use sqlx::types::time::OffsetDateTime;
+    use std::error::Error;
+    // Assuming axum::Json is required for submit_payment signature
+    use axum::Json;
+
+    #[tokio::test]
+    async fn get_tx_by_hash() -> Result<(), Box<dyn Error>> {
+        // Assuming Endpoints::init() exists and is necessary
+        // Replace with actual initialization if required
+        Endpoints::init()?;
+
+        let payment = Payments {
+            customer_email: "customer@example.com".to_string(),
+            transaction_hash: "0x10d26a9726e85f6bd33b5a1455219d8d56dd53d105e69e1be062119e8c7808a2".to_string(),
+            asset: Asset::USDC,
+            amount: 1000,
+            chain: Chain::Optimism,
+            date: OffsetDateTime::now_utc(),
+        };
+
+        // Ensure submit_payment accepts axum::Json<Payments>
+        submit_payment(Json(payment)).await?;
+
+        Ok(())
+    }
+}
+

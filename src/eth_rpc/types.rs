@@ -101,11 +101,13 @@ pub struct RawGetTransactionByHashResponse {
     transaction_index: String,
     #[serde(rename = "type")]
     tx_type: String,
-    value: String,
+    pub value: String,
     v: String,
     r: String,
     s: String,
 }
+
+
 
 #[derive(Debug, Clone)]
 pub struct Transfer {
