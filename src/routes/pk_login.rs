@@ -55,8 +55,16 @@ pub struct PkLoginVerification {
 }
 
 #[tracing::instrument]
-pub async fn pk_login_response(Json(payload): Json<PkLoginAuth>) -> Result<impl IntoResponse, ApiError<PkLoginError>> {
-    let verification_address = format!("0x{}", &payload.pubkey[payload.pubkey.len() - 41 ..]); 
+pub async fn pk_login_response(Json(payload): Json<PkLoginAuth>) -> Result<impl IntoResponse, ApiError<PkLoginError>> { 
+    let verification_address = {
+        let mut address_hasher = Keccak256::default(); 
+        address_hasher.update(payload.pubkey.as_bytes());
+        let hash_raw = address_hasher.finalize();
+        let mut hash: [u8; 32] = [0u8;32];
+        hash.copy_from_slice(&hash_raw);
+        let hash_string = hex::encode(hash);
+        format!("0x{}", &hash_string[hash_string.len() - 41 ..])
+    }; 
     let user = sqlx::query_as!(PkLoginVerification, 
         r#"SELECT verificationCode, wallet, email, role as "role!: Role" FROM Customers where email = $1"#,
         &verification_address
@@ -74,7 +82,7 @@ pub async fn pk_login_response(Json(payload): Json<PkLoginAuth>) -> Result<impl 
     let pk = PublicKey::from_str(&payload.pubkey)?;
     Secp256k1::new().verify_ecdsa(&msg, &signature, &pk)?;
     // check that the final 20 bytes of signing pubkey is equal to the address we have in the database
-    if &verification_address != &user.wallet {
+    if verification_address != user.wallet {
         return Err(ApiError::new(PkLoginError::WrongSigner));
     }
     
