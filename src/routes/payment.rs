@@ -3,6 +3,7 @@ use crate::database::types::RELATIONAL_DATABASE;
 use axum::{extract::Path, http::StatusCode, response::IntoResponse};
 use sqlx::types::time::OffsetDateTime;
 
+#[tracing::instrument]
 pub async fn verify_subscription(
     Path(email_address): Path<String>,
 ) -> Result<impl IntoResponse, ApiError<PaymentError>> {

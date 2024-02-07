@@ -18,6 +18,7 @@ pub struct LoginRequest {
     password: String,
 }
 
+#[tracing::instrument]
 pub async fn user_login(
     Json(payload): Json<LoginRequest>,
 ) -> Result<impl IntoResponse, ApiError<LoginError>> {

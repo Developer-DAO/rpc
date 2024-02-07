@@ -17,6 +17,7 @@ use super::{
     types::{Email, RegisterUser, SERVER_EMAIL},
 };
 
+#[tracing::instrument]
 pub async fn register_user(
     Json(payload): Json<RegisterUser>,
 ) -> Result<impl IntoResponse, ApiError<RegisterUserError>> {

@@ -1,6 +1,6 @@
 use super::{errors::ApiError, types::{Claims, JWT_KEY}};
 use crate::{database::{errors::ParsingError, types::{RELATIONAL_DATABASE, Role}}, eth_rpc::types::Address};
-use axum::{http::StatusCode, response::IntoResponse, Json};
+use axum::{extract::Query, http::StatusCode, response::IntoResponse, Json};
 use rand::{rngs::ThreadRng, Rng};
 use secp256k1::{ecdsa::Signature, Message, PublicKey, Secp256k1};
 use serde::{Deserialize, Serialize};
@@ -21,8 +21,9 @@ pub struct PkLoginChallenge {
     verificationcode: String,
 }
 
+#[tracing::instrument]
 pub async fn pk_login_challenge(
-    Json(payload): Json<PkLoginRequest>,
+    Query(payload): Query<PkLoginRequest>,
 ) -> Result<impl IntoResponse, ApiError<PkLoginError>> {
     
     let user = sqlx::query_as!(PkLoginChallenge, 
@@ -54,6 +55,7 @@ pub struct PkLoginVerification {
     email: String,
 }
 
+#[tracing::instrument]
 pub async fn pk_login_response(Json(payload): Json<PkLoginAuth>) -> Result<impl IntoResponse, ApiError<PkLoginError>> {
     let user = sqlx::query_as!(PkLoginVerification, 
         r#"SELECT verificationCode, wallet, email, role as "role!: Role" FROM Customers where email = $1"#,

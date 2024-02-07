@@ -10,18 +10,19 @@ use serde::{Deserialize, Serialize};
 
 use super::errors::ApiError;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct ActivationRequest {
     pub email: String,
     pub code: String,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct ActivationCode {
     pub verificationcode: String,
     pub activated: bool,
 }
 
+#[tracing::instrument]
 pub async fn activate_account(
     Json(payload): Json<ActivationRequest>,
 ) -> Result<impl IntoResponse, ApiError<ActivationError>> {
