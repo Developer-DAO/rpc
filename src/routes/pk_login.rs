@@ -12,7 +12,7 @@ use jwt_simple::{algorithms::MACLike, reexports::coarsetime::Duration};
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct PkLoginRequest {
-    email: String,
+    address: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -27,8 +27,8 @@ pub async fn pk_login_challenge(
 ) -> Result<impl IntoResponse, ApiError<PkLoginError>> {
     
     let user = sqlx::query_as!(PkLoginChallenge, 
-        "SELECT verificationCode, activated FROM Customers where email = $1",
-        &payload.email
+        "SELECT verificationCode, activated FROM Customers where wallet = $1",
+        &payload.address
     ).fetch_optional(RELATIONAL_DATABASE.get().unwrap())
     .await?
     .ok_or_else(|| ApiError::new(PkLoginError::UserNotFound))?;
@@ -42,7 +42,6 @@ pub async fn pk_login_challenge(
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct PkLoginAuth {
-    email: String,
     sig: String,
     pubkey: String,
 }
@@ -57,9 +56,10 @@ pub struct PkLoginVerification {
 
 #[tracing::instrument]
 pub async fn pk_login_response(Json(payload): Json<PkLoginAuth>) -> Result<impl IntoResponse, ApiError<PkLoginError>> {
+    let verification_address = format!("0x{}", &payload.pubkey[payload.pubkey.len() - 41 ..]); 
     let user = sqlx::query_as!(PkLoginVerification, 
         r#"SELECT verificationCode, wallet, email, role as "role!: Role" FROM Customers where email = $1"#,
-        &payload.email
+        &verification_address
     ).fetch_optional(RELATIONAL_DATABASE.get().unwrap())
     .await?
     .ok_or_else(|| ApiError::new(PkLoginError::UserNotFound))?;
@@ -74,8 +74,7 @@ pub async fn pk_login_response(Json(payload): Json<PkLoginAuth>) -> Result<impl 
     let pk = PublicKey::from_str(&payload.pubkey)?;
     Secp256k1::new().verify_ecdsa(&msg, &signature, &pk)?;
     // check that the final 20 bytes of signing pubkey is equal to the address we have in the database
-    let verification_address = format!("0x{}", &payload.pubkey[payload.pubkey.len() - 41 ..]); 
-    if verification_address != user.wallet {
+    if &verification_address != &user.wallet {
         return Err(ApiError::new(PkLoginError::WrongSigner));
     }
     
@@ -83,7 +82,7 @@ pub async fn pk_login_response(Json(payload): Json<PkLoginAuth>) -> Result<impl 
     sqlx::query!(
         "UPDATE Customers SET activated = true, verificationCode = $1 WHERE email = $2",
         new_code.to_string(),
-        &payload.email
+        &user.email
     )
     .execute(RELATIONAL_DATABASE.get().unwrap())
     .await?;
@@ -91,7 +90,7 @@ pub async fn pk_login_response(Json(payload): Json<PkLoginAuth>) -> Result<impl 
     let user_info = Claims {
         role: user.role,
         email: user.email,
-        wallet: user.wallet.parse::<Address>()?,
+        wallet: Address(user.wallet),
     };
     let claims = jwt_simple::claims::Claims::with_custom_claims(user_info, Duration::from_hours(2));
 

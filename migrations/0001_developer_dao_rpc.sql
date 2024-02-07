@@ -5,7 +5,7 @@ CREATE TYPE ROLE AS ENUM('normie', 'admin');
 
 CREATE TABLE IF NOT EXISTS Customers (
     email VARCHAR(255) NOT NULL PRIMARY KEY,
-    wallet VARCHAR(42) NOT NULL,
+    wallet VARCHAR(42) UNIQUE NOT NULL,
     password VARCHAR(120) NOT NULL,
     role ROLE NOT NULL,
     verificationCode VARCHAR(10) NOT NULL,
