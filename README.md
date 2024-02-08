@@ -10,7 +10,7 @@ MacOs: `brew install postgresql@16`
 
 Linux: `sudo apt-get -y install postgresql-16`
 
-windows: Download the [installer](https://www.postgresql.org/download/windows/)
+Windows: Download the [installer](https://www.postgresql.org/download/windows/)
 
 Optional: Install [PgAdmin](https://www.pgadmin.org)
 
@@ -28,7 +28,9 @@ Windows: Download the [installer](https://static.rust-lang.org/rustup/dist/i686-
 
 - run `cargo install sqlx-cli`
 
-- Create .env file in project root 
+- `cd` into the project's root 
+
+- create .env file
 
 - The following fields should be added: 
 
@@ -38,17 +40,17 @@ Windows: Download the [installer](https://static.rust-lang.org/rustup/dist/i686-
     4. `ETHEREUM_ENDPOINT`
     5. `JWT_KEY`
 
-- Create connection string from DB details. 
+- Create connection string from DB details and add to .env as the value of DATABASE_URL. 
 Example: postgres://username:password@localhost:5432/databasename
 
 - run `sqlx database create`
 
 - run `sqlx migrate run`
 
-- generate JWT key by running the test called `get_key` in crate::routes::login and add to .env
+- generate JWT key by running the test called `get_key` in crate::routes::login and use as value of JWT_KEY in .env
 
-- put in an email address for SMTP_USERNAME (it is probably best to make a new one or a temp)
+- add an email address for SMTP_USERNAME (it is probably best to make a new one or a temp)
 
-- put in a password to that email for SMTP_PASSWORD
+- add a password to that email for SMTP_PASSWORD
 
-- put an a URL to any Ethereum JSON-RPC endpoint (local or otherwise) for ETHEREUM_ENDPOINT
+- add a URL to any Ethereum JSON-RPC endpoint (local or otherwise) for ETHEREUM_ENDPOINT
