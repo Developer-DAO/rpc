@@ -22,6 +22,7 @@ pub async fn register_user(
     Json(payload): Json<RegisterUser>,
 ) -> Result<impl IntoResponse, ApiError<RegisterUserError>> {
     let db_connection = RELATIONAL_DATABASE.get().unwrap();
+    let smtp_server = dotenvy::var("SMTP_SERVER").unwrap_or("smtp.gmail.com".to_string());
 
     let account: Option<Customers> = sqlx::query_as!(
         Customers,
@@ -64,7 +65,7 @@ pub async fn register_user(
             "Your verification code is: {}",
             verification_code
         ))?;
-    let mailer = SmtpTransport::relay("smtp.gmail.com")?
+    let mailer = SmtpTransport::relay(&smtp_server)?
         .credentials(email_credentials)
         .build();
 

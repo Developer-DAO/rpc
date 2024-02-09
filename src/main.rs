@@ -44,8 +44,8 @@ async fn main() {
         .route("/login", post(user_login))
         .route("/pk_login", get(pk_login_challenge).post(pk_login_response))
         .layer(cors);
-    info!("Initialized D_D RPC on 0.0.0.0:3000");
-    let listener = TcpListener::bind("0.0.0.0:3000").await.unwrap();
+    info!("Initialized D_D RPC on 127.0.0.1:2345");
+    let listener = TcpListener::bind("127.0.0.1:2345").await.unwrap();
 
     axum::serve(listener, app).await.unwrap();
 }
