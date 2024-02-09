@@ -23,6 +23,7 @@ pub async fn register_user(
 ) -> Result<impl IntoResponse, ApiError<RegisterUserError>> {
     let db_connection = RELATIONAL_DATABASE.get().unwrap();
     let smtp_server = dotenvy::var("SMTP_SERVER").unwrap_or("smtp.gmail.com".to_string());
+    println!("{:#?}", payload);
 
     let account: Option<Customers> = sqlx::query_as!(
         Customers,
@@ -69,9 +70,15 @@ pub async fn register_user(
         .credentials(email_credentials)
         .build();
 
-    mailer.send(&email)?;
+    match mailer.send(&email) {
+        Ok(_) => (),
+        Err(e) => {
+            println!("{:#?}", e);
+            return Err(ApiError::new(RegisterUserError::SmtpError(e)));
+        },
+    };
 
-    sqlx::query!(
+    let result = sqlx::query!(
         "INSERT INTO Customers(email, wallet, password, verificationCode, activated) 
             VALUES ($1, $2, $3, $4, $5)",
         &payload.email,
@@ -81,9 +88,13 @@ pub async fn register_user(
         false,
     )
     .execute(db_connection)
-    .await?;
+    .await;
 
-    Ok((StatusCode::OK, "User was successfully registered").into_response())
+    match result {
+        Ok(_) => Ok((StatusCode::OK, "User was successfully registered").into_response()),
+        Err(e) => {println!("{:#?}", e);
+            Err(ApiError::new(RegisterUserError::DatabaseError(e)))},
+    }
 }
 
 #[derive(Debug)]
