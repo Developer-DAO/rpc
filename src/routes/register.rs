@@ -5,9 +5,10 @@ use argon2::{
 };
 use axum::{http::StatusCode, response::IntoResponse, Json};
 use lettre::{
+    address::AddressError,
     message::{header::ContentType, Mailbox},
     transport::smtp::{self, authentication::Credentials},
-    Message, Transport, address::AddressError,
+    Message, Transport,
 };
 use rand::{rngs::ThreadRng, Rng};
 
@@ -66,10 +67,11 @@ pub async fn register_user(
     mailer.send(&email)?;
 
     sqlx::query!(
-        "INSERT INTO Customers(email, wallet, password, verificationCode, activated) 
-            VALUES ($1, $2, $3, $4, $5)",
+        "INSERT INTO Customers(email, wallet, role, password, verificationCode, activated) 
+            VALUES ($1, $2, $3, $4, $5, $6)",
         &payload.email,
         payload.wallet,
+        Role::Normie as Role,
         hashed_pass,
         verification_code.to_string(),
         false,
@@ -191,12 +193,9 @@ pub mod test {
 
         println!("{res:#?}");
 
-        sqlx::query!(
-            "DELETE FROM Customers WHERE email = $1",
-            &to
-        )
-        .execute(RELATIONAL_DATABASE.get().unwrap())
-        .await?;
+        sqlx::query!("DELETE FROM Customers WHERE email = $1", &to)
+            .execute(RELATIONAL_DATABASE.get().unwrap())
+            .await?;
 
         Ok(())
     }
@@ -206,16 +205,14 @@ pub mod test {
         dotenv().unwrap();
 
         let verification_code: u32 = ThreadRng::default().gen_range(10000000..99999999);
-        
+
         let username = dotenvy::var("SMTP_USERNAME")?;
         let password = dotenvy::var("SMTP_PASSWORD")?;
 
         let user_email = username.parse()?;
         let server_mailbox: Mailbox = format!("Developer DAO RPC <{}>", &username).parse()?;
 
-        let email_credentials = Credentials::new(
-            username, password
-        );
+        let email_credentials = Credentials::new(username, password);
 
         let email = Message::builder()
             .from(server_mailbox)
