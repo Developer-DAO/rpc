@@ -1,14 +1,13 @@
-use crate::database::types::{Customers, RELATIONAL_DATABASE, Role};
+use crate::database::types::{Customers, Role, RELATIONAL_DATABASE};
 use argon2::{
     password_hash::{rand_core::OsRng, SaltString},
     Argon2, PasswordHasher,
 };
 use axum::{http::StatusCode, response::IntoResponse, Json};
 use lettre::{
-    address::AddressError,
     message::{header::ContentType, Mailbox},
-    transport::smtp::authentication::Credentials,
-    Message, SmtpTransport, Transport,
+    transport::smtp::{self, authentication::Credentials},
+    Message, Transport, address::AddressError,
 };
 use rand::{rngs::ThreadRng, Rng};
 
@@ -22,7 +21,6 @@ pub async fn register_user(
     Json(payload): Json<RegisterUser>,
 ) -> Result<impl IntoResponse, ApiError<RegisterUserError>> {
     let db_connection = RELATIONAL_DATABASE.get().unwrap();
-
     let account: Option<Customers> = sqlx::query_as!(
         Customers,
         r#"SELECT email, wallet, password, activated, verificationCode, role as "role!: Role" FROM Customers WHERE email = $1"#,
@@ -32,9 +30,7 @@ pub async fn register_user(
     .await?;
 
     if account.is_some() {
-        return Err(ApiError::new(
-            RegisterUserError::AlreadyRegistered,
-        ));
+        return Err(ApiError::new(RegisterUserError::AlreadyRegistered));
     }
 
     let hashed_pass: String = {
@@ -44,7 +40,7 @@ pub async fn register_user(
             .to_string()
     };
 
-    let verification_code: u32 = ThreadRng::default().gen_range(10000000 .. 99999999);
+    let verification_code: u32 = ThreadRng::default().gen_range(10000000..99999999);
 
     let server_email_info: &'static Email = SERVER_EMAIL.get().unwrap();
     let email_credentials = Credentials::new(
@@ -52,7 +48,8 @@ pub async fn register_user(
         server_email_info.password.to_string(),
     );
 
-    let server_mailbox: Mailbox = server_email_info.address.parse()?;
+    let server_mailbox: Mailbox =
+        format!("Developer DAO RPC <{}>", server_email_info.address).parse()?;
     let user_email = payload.email.parse()?;
 
     let email = Message::builder()
@@ -60,11 +57,9 @@ pub async fn register_user(
         .to(user_email)
         .subject("D_D RPC Verification Code")
         .header(ContentType::TEXT_PLAIN)
-        .body(format!(
-            "Your verification code is: {}",
-            verification_code
-        ))?;
-    let mailer = SmtpTransport::relay("smtp.gmail.com")?
+        .body(format!("Your verification code is: {}", verification_code))?;
+
+    let mailer = smtp::SmtpTransport::starttls_relay("smtp.gmail.com")?
         .credentials(email_credentials)
         .build();
 
@@ -151,5 +146,89 @@ impl From<lettre::error::Error> for ApiError<RegisterUserError> {
 impl From<lettre::transport::smtp::Error> for ApiError<RegisterUserError> {
     fn from(value: lettre::transport::smtp::Error) -> Self {
         ApiError::new(RegisterUserError::SmtpError(value))
+    }
+}
+
+#[cfg(test)]
+pub mod test {
+    use crate::{
+        database::types::RELATIONAL_DATABASE, register_user, routes::types::RegisterUser, Database,
+        Email, JWTKey, TcpListener,
+    };
+    use axum::{routing::post, Router};
+    use dotenvy::dotenv;
+    use lettre::{
+        message::{header::ContentType, Mailbox},
+        transport::smtp::{self, authentication::Credentials},
+        Message, Transport,
+    };
+    use rand::{rngs::ThreadRng, Rng};
+
+    #[tokio::test]
+    async fn register() -> Result<(), Box<dyn std::error::Error>> {
+        dotenv().unwrap();
+        JWTKey::init().unwrap();
+        Database::init(None).await.unwrap();
+        Email::init().unwrap();
+        let to = dotenvy::var("SMTP_USERNAME")?;
+
+        tokio::spawn(async move {
+            let app = Router::new().route("/api/register", post(register_user));
+            let listener = TcpListener::bind("0.0.0.0:3000").await.unwrap();
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        let client = reqwest::Client::new();
+        let res = client
+            .post("http://localhost:3000/api/register")
+            .json(&RegisterUser {
+                email: to.to_string(),
+                wallet: "0x0c5E7D8C1494B74891e4c6539Be96C8e2402dcEF".to_string(),
+                password: "test".to_string(),
+            })
+            .send()
+            .await?;
+
+        println!("{res:#?}");
+
+        sqlx::query!(
+            "DELETE FROM Customers WHERE email = $1",
+            &to
+        )
+        .execute(RELATIONAL_DATABASE.get().unwrap())
+        .await?;
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn mail() -> Result<(), Box<dyn std::error::Error>> {
+        dotenv().unwrap();
+
+        let verification_code: u32 = ThreadRng::default().gen_range(10000000..99999999);
+        
+        let username = dotenvy::var("SMTP_USERNAME")?;
+        let password = dotenvy::var("SMTP_PASSWORD")?;
+
+        let user_email = username.parse()?;
+        let server_mailbox: Mailbox = format!("Developer DAO RPC <{}>", &username).parse()?;
+
+        let email_credentials = Credentials::new(
+            username, password
+        );
+
+        let email = Message::builder()
+            .from(server_mailbox)
+            .to(user_email)
+            .subject("D_D RPC Verification Code")
+            .header(ContentType::TEXT_PLAIN)
+            .body(format!("Your verification code is: {}", verification_code))?;
+        let mailer = smtp::SmtpTransport::starttls_relay("smtp.gmail.com")?
+            .credentials(email_credentials)
+            .build();
+
+        mailer.send(&email)?;
+
+        Ok(())
     }
 }
