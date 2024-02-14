@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS Customers (
 
 CREATE TABLE IF NOT EXISTS PaymentInfo (
     customerEmail VARCHAR(255) PRIMARY KEY,
-    callCount INT NOT NULL,
+    callCount BIGINT NOT NULL,
     subscription PLAN NOT NULL,
     planExpiration TIMESTAMPTZ NOT NULL
 );

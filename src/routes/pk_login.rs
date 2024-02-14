@@ -1,14 +1,25 @@
-use super::{errors::ApiError, types::{Claims, JWT_KEY}};
-use crate::{database::{errors::ParsingError, types::{RELATIONAL_DATABASE, Role}}, eth_rpc::types::Address};
+use super::{
+    errors::ApiError,
+    types::{Claims, JWT_KEY},
+};
+use crate::{
+    database::{
+        errors::ParsingError,
+        types::{Role, RELATIONAL_DATABASE},
+    },
+    eth_rpc::types::Address,
+};
 use axum::{extract::Query, http::StatusCode, response::IntoResponse, Json};
+use jwt_simple::{algorithms::MACLike, reexports::coarsetime::Duration};
 use rand::{rngs::ThreadRng, Rng};
 use secp256k1::{ecdsa::Signature, Message, PublicKey, Secp256k1};
 use serde::{Deserialize, Serialize};
-use std::{
-    error::Error, fmt::{self, Display, Formatter}, str::FromStr
-};
 use sha3::{Digest, Keccak256};
-use jwt_simple::{algorithms::MACLike, reexports::coarsetime::Duration};
+use std::{
+    error::Error,
+    fmt::{self, Display, Formatter},
+    str::FromStr,
+};
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct PkLoginRequest {
@@ -25,19 +36,27 @@ pub struct PkLoginChallenge {
 pub async fn pk_login_challenge(
     Query(payload): Query<PkLoginRequest>,
 ) -> Result<impl IntoResponse, ApiError<PkLoginError>> {
-    
-    let user = sqlx::query_as!(PkLoginChallenge, 
+    let user = sqlx::query_as!(
+        PkLoginChallenge,
         "SELECT verificationCode, activated FROM Customers where wallet = $1",
         &payload.address
-    ).fetch_optional(RELATIONAL_DATABASE.get().unwrap())
+    )
+    .fetch_optional(RELATIONAL_DATABASE.get().unwrap())
     .await?
     .ok_or_else(|| ApiError::new(PkLoginError::UserNotFound))?;
 
     if !user.activated {
-        return Err(ApiError::new(PkLoginError::AccountNotActivated));
-    } 
+        Err(ApiError::new(PkLoginError::AccountNotActivated))?
+    }
 
-    Ok((StatusCode::OK, format!("You are signing into D_D RPC. Special Code: {}", user.verificationcode)).into_response())
+    Ok((
+        StatusCode::OK,
+        format!(
+            "You are signing into D_D RPC. Special Code: {}",
+            user.verificationcode
+        ),
+    )
+        .into_response())
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -48,34 +67,40 @@ pub struct PkLoginAuth {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct PkLoginVerification {
-    wallet: String, 
+    wallet: String,
     verificationcode: String,
-    role: Role, 
+    role: Role,
     email: String,
 }
 
 #[tracing::instrument]
-pub async fn pk_login_response(Json(payload): Json<PkLoginAuth>) -> Result<impl IntoResponse, ApiError<PkLoginError>> { 
+pub async fn pk_login_response(
+    Json(payload): Json<PkLoginAuth>,
+) -> Result<impl IntoResponse, ApiError<PkLoginError>> {
+    let db = RELATIONAL_DATABASE.get().unwrap();
     let verification_address = {
-        let mut address_hasher = Keccak256::default(); 
+        let mut address_hasher = Keccak256::default();
         address_hasher.update(payload.pubkey.as_bytes());
         let hash_raw = address_hasher.finalize();
-        let mut hash: [u8; 32] = [0u8;32];
+        let mut hash: [u8; 32] = [0u8; 32];
         hash.copy_from_slice(&hash_raw);
         let hash_string = hex::encode(hash);
-        format!("0x{}", &hash_string[hash_string.len() - 41 ..])
-    }; 
+        format!("0x{}", &hash_string[hash_string.len() - 41..])
+    };
     let user = sqlx::query_as!(PkLoginVerification, 
         r#"SELECT verificationCode, wallet, email, role as "role!: Role" FROM Customers where email = $1"#,
         &verification_address
-    ).fetch_optional(RELATIONAL_DATABASE.get().unwrap())
+    ).fetch_optional(db)
     .await?
     .ok_or_else(|| ApiError::new(PkLoginError::UserNotFound))?;
-    let sign_in_str = format!("You are signing into D_D RPC. Special Code: {}", &user.verificationcode);    
+    let sign_in_str = format!(
+        "You are signing into D_D RPC. Special Code: {}",
+        &user.verificationcode
+    );
     let mut hasher = Keccak256::default();
     hasher.update(sign_in_str.as_bytes());
     let res = hasher.finalize();
-    let mut hash: [u8; 32] = [0u8;32];
+    let mut hash: [u8; 32] = [0u8; 32];
     hash.copy_from_slice(&res);
     let msg = Message::from_digest(hash);
     let signature = Signature::from_str(&payload.sig)?;
@@ -83,16 +108,16 @@ pub async fn pk_login_response(Json(payload): Json<PkLoginAuth>) -> Result<impl 
     Secp256k1::new().verify_ecdsa(&msg, &signature, &pk)?;
     // check that the final 20 bytes of signing pubkey is equal to the address we have in the database
     if verification_address != user.wallet {
-        return Err(ApiError::new(PkLoginError::WrongSigner));
+        Err(ApiError::new(PkLoginError::WrongSigner))?
     }
-    
+
     let new_code: u32 = ThreadRng::default().gen_range(10000000..99999999);
     sqlx::query!(
         "UPDATE Customers SET activated = true, verificationCode = $1 WHERE email = $2",
         new_code.to_string(),
         &user.email
     )
-    .execute(RELATIONAL_DATABASE.get().unwrap())
+    .execute(db)
     .await?;
 
     let user_info = Claims {
@@ -104,7 +129,7 @@ pub async fn pk_login_response(Json(payload): Json<PkLoginAuth>) -> Result<impl 
 
     let key = JWT_KEY.get().unwrap();
     let jwt = key.authenticate(claims)?;
-    Ok((StatusCode::OK, jwt).into_response()) 
+    Ok((StatusCode::OK, jwt).into_response())
 }
 
 #[derive(Debug)]
@@ -121,18 +146,31 @@ pub enum PkLoginError {
 impl Display for PkLoginError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            PkLoginError::WrongSigner => write!(f, "The recovered signer is the incorrect pubkey for this account"),
-            PkLoginError::DatabaseError(e) => write!(f, "Something went wrong while querying the database: {}", e),
+            PkLoginError::WrongSigner => write!(
+                f,
+                "The recovered signer is the incorrect pubkey for this account"
+            ),
+            PkLoginError::DatabaseError(e) => {
+                write!(f, "Something went wrong while querying the database: {}", e)
+            }
             PkLoginError::AccountNotActivated => write!(f, "This account is yet to be activated"),
             PkLoginError::UserNotFound => write!(f, "User not found!"),
-            PkLoginError::EcdsaError(e) => write!(f, "An error occured while verifying the user's signature: {}", e),
+            PkLoginError::EcdsaError(e) => write!(
+                f,
+                "An error occured while verifying the user's signature: {}",
+                e
+            ),
             PkLoginError::JwtError(e) => write!(f, "An error occured while creating a JWT: {}", e),
-            PkLoginError::AddressParsingError(e) => write!(f, "An error occured while parsing a string into an address: {}", e),
+            PkLoginError::AddressParsingError(e) => write!(
+                f,
+                "An error occured while parsing a string into an address: {}",
+                e
+            ),
         }
     }
 }
 
-impl Error for PkLoginError{
+impl Error for PkLoginError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             PkLoginError::AccountNotActivated => None,
@@ -141,7 +179,7 @@ impl Error for PkLoginError{
             PkLoginError::UserNotFound => None,
             PkLoginError::EcdsaError(e) => Some(e),
             PkLoginError::JwtError(e) => e.source(),
-            PkLoginError::AddressParsingError(e) => Some(e), 
+            PkLoginError::AddressParsingError(e) => Some(e),
         }
     }
 }

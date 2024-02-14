@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use sqlx::{migrate, PgPool, Pool, Postgres, types::time::OffsetDateTime, FromRow};
+use sqlx::{migrate, types::time::OffsetDateTime, FromRow, PgPool, Pool, Postgres};
 use std::fmt::Display;
 use std::str::FromStr;
 use std::sync::OnceLock;
@@ -39,7 +39,7 @@ pub struct Customers {
 #[derive(FromRow, Debug)]
 pub struct PaymentInfo {
     pub customer_email: String,
-    pub call_count: i32,
+    pub call_count: i64,
     pub plan_expiration: i64,
     pub subscription: Plan,
 }
@@ -48,16 +48,16 @@ pub struct PaymentInfo {
 pub struct Payments {
     pub customer_email: String,
     pub transaction_hash: String,
-    pub asset: Asset, 
+    pub asset: Asset,
     pub amount: i64,
-    pub chain: Chain, 
+    pub chain: Chain,
     pub date: OffsetDateTime,
 }
 
-#[derive(FromRow, Debug)]
+#[derive(FromRow, Debug, Serialize, Deserialize)]
 pub struct Api {
-    pub customer_email: String, 
-    pub api_key: String,
+    pub customeremail: String,
+    pub apikey: String,
 }
 
 #[derive(Debug, Clone)]
@@ -70,8 +70,8 @@ pub enum Plan {
 
 #[derive(Debug, Clone)]
 pub enum Chain {
-    Optimism, 
-    Polygon, 
+    Optimism,
+    Polygon,
     Arbitrum,
     Base,
 }
@@ -79,17 +79,17 @@ pub enum Chain {
 #[derive(Debug, Clone)]
 pub enum Asset {
     Ether,
-    USDC
+    USDC,
 }
 
 impl Display for Plan {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-           Plan::None => write!(f, "none"),
+            Plan::None => write!(f, "none"),
             Plan::Based => write!(f, "based"),
-            Plan::Premier  => write!(f, "premier"),
+            Plan::Premier => write!(f, "premier"),
             Plan::Gigachad => write!(f, "gigachad"),
-        } 
+        }
     }
 }
 
@@ -101,7 +101,7 @@ impl FromStr for Plan {
             "based" => Plan::Based,
             "premier" => Plan::Premier,
             "gigachad" => Plan::Gigachad,
-            _ => return Err(ParsingError(s.to_string(), "Plan")),
+            _ => Err(ParsingError(s.to_string(), "Plan"))?,
         };
 
         Ok(plan)
@@ -128,7 +128,7 @@ impl FromStr for Chain {
             "polygon" => Chain::Polygon,
             "base" => Chain::Base,
             "arbitrum" => Chain::Arbitrum,
-            _ => return Err(ParsingError(s.to_string(), "Chain")),
+            _ => Err(ParsingError(s.to_string(), "Chain"))?,
         };
         Ok(plan)
     }
@@ -137,15 +137,15 @@ impl FromStr for Chain {
 #[derive(Debug, Clone, sqlx::Type, Serialize, Deserialize)]
 #[sqlx(type_name = "ROLE", rename_all = "lowercase")]
 pub enum Role {
-    Normie, 
-    Admin
+    Normie,
+    Admin,
 }
 
 impl From<String> for Role {
     fn from(value: String) -> Self {
         match value.to_lowercase().as_ref() {
-            "normie" => Role::Normie, 
-            "admin" => Role::Admin, 
+            "normie" => Role::Normie,
+            "admin" => Role::Admin,
             _ => Role::Normie,
         }
     }
@@ -164,7 +164,7 @@ impl Display for Asset {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Asset::Ether => write!(f, "ether"),
-            Asset::USDC => write!(f, "usdc")
+            Asset::USDC => write!(f, "usdc"),
         }
     }
 }
@@ -176,7 +176,7 @@ impl FromStr for Asset {
         let plan = match s {
             "ether" => Asset::Ether,
             "usdc" => Asset::USDC,
-            _ => return Err(ParsingError(s.to_string(), "Asset")),
+            _ => Err(ParsingError(s.to_string(), "Asset"))?,
         };
 
         Ok(plan)

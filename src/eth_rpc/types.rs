@@ -1,7 +1,7 @@
 use crate::{database::errors::ParsingError, eth_rpc::errors::EthCallError};
 use axum::http::Uri;
 use crypto_bigint::U256;
-use hex::{encode, decode};
+use hex::{decode, encode};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use std::{future::Future, str::FromStr, sync::OnceLock};
@@ -119,7 +119,7 @@ impl FromStr for Transfer {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let fn_selector = &s[0..10];
         if fn_selector != "0xa9059cbb" {
-            return Err(Box::new(ParsingError(fn_selector.to_string(), "Transfer")));
+            Err(Box::new(ParsingError(fn_selector.to_string(), "Transfer")))?
         }
         let bytes = decode(&s[2..])?;
         let to = &bytes[16..36];
@@ -137,13 +137,12 @@ pub struct Address(pub String);
 
 impl Address {
     pub fn try_address(s: &str) -> Result<(), ParsingError> {
-        if !s.starts_with("0x"){
-            return Err(ParsingError(s.to_owned(), "Address"));
-
+        if !s.starts_with("0x") {
+            Err(ParsingError(s.to_owned(), "Address"))?
         }
 
         if s.len() != 42usize {
-            return Err(ParsingError(s.to_owned(), "Address"));
+            Err(ParsingError(s.to_owned(), "Address"))?
         }
 
         Ok(())
@@ -155,12 +154,12 @@ impl FromStr for Address {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if !s.starts_with("0x") {
-            return Err(ParsingError(s.to_owned(), "Address"));
+            Err(ParsingError(s.to_owned(), "Address"))?
         }
 
         if s.len() != 42usize {
-            return Err(ParsingError(s.to_owned(), "Address"));
-        } 
+            Err(ParsingError(s.to_owned(), "Address"))?
+        }
 
         Ok(Address(s.to_string()))
     }
@@ -219,20 +218,19 @@ impl Provider {
 
 #[cfg(test)]
 pub mod tests {
-   use crate::eth_rpc::types::{Address, Transfer};
-   use std::str::FromStr;
-   use crypto_bigint::U256;
+    use crate::eth_rpc::types::{Address, Transfer};
+    use crypto_bigint::U256;
+    use std::str::FromStr;
 
     #[test]
-    fn parse_transfer_calldata() -> Result<(), Box<dyn std::error::Error>>{
-        let calldata = "0xa9059cbb0000000000000000000000003f5047bdb647dc39c88625e17bdbffee905a9f4400000000000000000000000000000000000000000000011c9a62d04ed0c80000"; 
-        let expected_address = Address::from_str(&"0x3F5047BDb647Dc39C88625E17BDBffee905A9F44".to_lowercase())?; 
+    fn parse_transfer_calldata() -> Result<(), Box<dyn std::error::Error>> {
+        let calldata = "0xa9059cbb0000000000000000000000003f5047bdb647dc39c88625e17bdbffee905a9f4400000000000000000000000000000000000000000000011c9a62d04ed0c80000";
+        let expected_address =
+            Address::from_str(&"0x3F5047BDb647Dc39C88625E17BDBffee905A9F44".to_lowercase())?;
         let expected_amount = U256::from_u128(5250000000000000000000u128);
         let res = Transfer::from_str(calldata)?;
         assert_eq!(res.to, expected_address);
         assert_eq!(res.amount, expected_amount);
         Ok(())
     }
-    
-
 }

@@ -1,7 +1,16 @@
+use crate::middleware::jwt_auth::verify_jwt;
 use crate::routes::types::{Email, JWTKey};
-use crate::routes::{payment::verify_subscription, register::register_user, login::user_login, pk_login::{pk_login_challenge, pk_login_response}, activate::activate_account};
+use crate::routes::{
+    activate::activate_account,
+    api_keys::{delete_key, generate_api_keys, get_all_api_keys},
+    login::user_login,
+    payment::verify_subscription,
+    pk_login::{pk_login_challenge, pk_login_response},
+    register::register_user,
+};
 use axum::{
     http::{header, StatusCode},
+    middleware::from_fn,
     response::IntoResponse,
     routing::{get, post},
     Router,
@@ -15,6 +24,7 @@ use tracing_subscriber::fmt::format::FmtSpan;
 pub mod database;
 pub mod eth_rpc;
 pub mod json_rpc;
+pub mod middleware;
 pub mod routes;
 
 #[tokio::main]
@@ -28,11 +38,21 @@ async fn main() {
         .with_max_level(tracing::Level::INFO)
         .with_target(false)
         .init();
-    
+
     let cors = CorsLayer::new()
         .allow_origin(Any)
         .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION])
         .allow_methods(Any);
+
+    let api_keys = Router::new()
+        .route(
+            "/api/keys",
+            get(get_all_api_keys)
+                .post(generate_api_keys)
+                .delete(delete_key),
+        )
+        .layer(from_fn(verify_jwt));
+
     let app = Router::new()
         .route(
             "/rpc/checkhealth",
@@ -43,6 +63,7 @@ async fn main() {
         .route("/activate", post(activate_account))
         .route("/login", post(user_login))
         .route("/pk_login", get(pk_login_challenge).post(pk_login_response))
+        .merge(api_keys)
         .layer(cors);
     info!("Initialized D_D RPC on 0.0.0.0:3000");
     let listener = TcpListener::bind("0.0.0.0:3000").await.unwrap();

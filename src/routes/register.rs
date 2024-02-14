@@ -31,7 +31,7 @@ pub async fn register_user(
     .await?;
 
     if account.is_some() {
-        return Err(ApiError::new(RegisterUserError::AlreadyRegistered));
+        Err(ApiError::new(RegisterUserError::AlreadyRegistered))?
     }
 
     let hashed_pass: String = {

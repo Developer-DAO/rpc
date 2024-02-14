@@ -22,8 +22,8 @@ impl std::error::Error for EthCallError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             EthCallError::RequestError(e) => Some(e),
-            EthCallError::HexDecodingError(e) => Some(e), 
-            EthCallError::JsonDecodingError(e) => Some(e), 
+            EthCallError::HexDecodingError(e) => Some(e),
+            EthCallError::JsonDecodingError(e) => Some(e),
         }
     }
 }
