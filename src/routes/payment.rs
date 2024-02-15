@@ -6,36 +6,26 @@ use axum::{extract::Path, http::StatusCode, response::IntoResponse , Json};
 use sqlx::types::time::OffsetDateTime;
 use crate::eth_rpc::types::{Endpoints, GetTransactionByHash, ETHEREUM_ENDPOINT, Receipt};
 
+#[tracing::instrument]
 pub async fn verify_subscription(
     Path(email_address): Path<String>,
 ) -> Result<impl IntoResponse, ApiError<PaymentError>> {
-    let db_connection = RELATIONAL_DATABASE.get().unwrap();
-    let utc_now = OffsetDateTime::now_utc();
-    let payment_validation: Option<PaymentValidation> = sqlx::query_as!(
+    let payment_validation: PaymentValidation = sqlx::query_as!(
         PaymentValidation,
         "SELECT PaymentInfo.planExpiration AS plan_expiration
         FROM PaymentInfo
         WHERE PaymentInfo.customerEmail = $1",
         email_address
     )
-    .fetch_optional(db_connection)
-    .await?;
+    .fetch_optional(RELATIONAL_DATABASE.get().unwrap())
+    .await?
+    .ok_or_else(|| ApiError::new(PaymentError::PaymentNotFound))?;
 
-    match payment_validation {
-        Some(payment_validation) => {
-            if payment_validation.plan_expiration >= utc_now {
-                // The payment is valid
-                Ok((StatusCode::OK, "User payment is valid").into_response())
-            } else {
-                // The payment is invalid (expired)
-                Err(ApiError::new(PaymentError::PaymentExpired))
-            }
-        }
-        None => {
-            // Payment information not found
-            Err(ApiError::new(PaymentError::PaymentNotFound))
-        }
+    if payment_validation.plan_expiration < OffsetDateTime::now_utc() {
+        Err(ApiError::new(PaymentError::PaymentExpired))?
     }
+    
+    Ok((StatusCode::OK, "User payment is valid").into_response())
 }
 
 async fn submit_payment(Json(payload): Json<Payments>)-> Result<() , Box<dyn std::error::Error>>{

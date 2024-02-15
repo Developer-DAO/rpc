@@ -1,6 +1,12 @@
-use super::{errors::ApiError, types::JWT_KEY};
+use super::{
+    errors::ApiError,
+    types::{Claims, JWT_KEY},
+};
 use crate::{
-    database::{errors::ParsingError, types::{Customers, Role, RELATIONAL_DATABASE}},
+    database::{
+        errors::ParsingError,
+        types::{Customers, Role, RELATIONAL_DATABASE},
+    },
     eth_rpc::types::Address,
 };
 use argon2::PasswordHash;
@@ -18,13 +24,7 @@ pub struct LoginRequest {
     password: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Claims {
-    role: Role,
-    email: String,
-    wallet: Address,
-}
-
+#[tracing::instrument]
 pub async fn user_login(
     Json(payload): Json<LoginRequest>,
 ) -> Result<impl IntoResponse, ApiError<LoginError>> {
@@ -41,7 +41,7 @@ pub async fn user_login(
     .ok_or_else(|| ApiError::new(LoginError::InvalidEmailOrPassword))?;
 
     if !user.activated {
-        return Err(ApiError::new(LoginError::AccountNotActivated));
+        Err(ApiError::new(LoginError::AccountNotActivated))?
     }
 
     let user_info = Claims {
@@ -69,12 +69,20 @@ pub enum LoginError {
 impl Display for LoginError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            LoginError::InvalidEmailOrPassword => write!(f, "The email or password used to login is invalid"),
-            LoginError::DatabaseError(e) => write!(f, "Something went wrong while querying the database: {}", e),
+            LoginError::InvalidEmailOrPassword => {
+                write!(f, "The email or password used to login is invalid")
+            }
+            LoginError::DatabaseError(e) => {
+                write!(f, "Something went wrong while querying the database: {}", e)
+            }
             LoginError::HashingError(e) => write!(f, "An error occurred while hashing: {}", e),
             LoginError::AccountNotActivated => write!(f, "This account is not yet activated!"),
-            LoginError::JwtCreationError(e) => write!(f, "There was an error creating a JWT: {}", e),
-            LoginError::AddressParsingError(e) => write!(f, "There was an error parsing input as an Address: {}", e),
+            LoginError::JwtCreationError(e) => {
+                write!(f, "There was an error creating a JWT: {}", e)
+            }
+            LoginError::AddressParsingError(e) => {
+                write!(f, "There was an error parsing input as an Address: {}", e)
+            }
         }
     }
 }
@@ -82,10 +90,10 @@ impl Display for LoginError {
 impl Error for LoginError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
-            LoginError::InvalidEmailOrPassword => None, 
-            LoginError::DatabaseError(e) => Some(e), 
-            LoginError::HashingError(_) => None, 
-            LoginError::AccountNotActivated => None, 
+            LoginError::InvalidEmailOrPassword => None,
+            LoginError::DatabaseError(e) => Some(e),
+            LoginError::HashingError(_) => None,
+            LoginError::AccountNotActivated => None,
             LoginError::JwtCreationError(e) => e.source(),
             LoginError::AddressParsingError(e) => Some(e),
         }

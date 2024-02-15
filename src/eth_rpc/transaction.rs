@@ -5,7 +5,10 @@ use crate::json_rpc::types::{JsonRpcRequest, JsonRpcResponse};
 
 use super::{
     errors::EthCallError,
-    types::{EthCall, RawGetTransactionByHashResponse, ResultWrapper, Receipt, GetTransactionByHash, RawGetTransactionReceiptResponse},
+    types::{
+        EthCall, GetTransactionByHash, RawGetTransactionByHashResponse,
+        RawGetTransactionReceiptResponse, Receipt, ResultWrapper,
+    },
 };
 
 impl EthCall for GetTransactionByHash {
@@ -52,7 +55,7 @@ impl EthCall for Receipt {
 #[cfg(test)]
 pub mod tests {
 
-    use crate::eth_rpc::types::{Endpoints, GetTransactionByHash, ETHEREUM_ENDPOINT, Receipt};
+    use crate::eth_rpc::types::{Endpoints, GetTransactionByHash, Receipt, ETHEREUM_ENDPOINT};
 
     #[tokio::test]
     async fn get_tx_by_hash() -> Result<(), Box<dyn std::error::Error>> {

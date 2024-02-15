@@ -1,22 +1,27 @@
-use std::fmt::{self, Display, Formatter};
 use axum::{http::StatusCode, response::IntoResponse};
+use std::fmt::{self, Display, Formatter};
 
 #[derive(Debug)]
-pub struct ApiError<T> 
-where T: std::error::Error
+pub struct ApiError<T>
+where
+    T: std::error::Error,
 {
     pub err: T,
 }
 
-impl<T> ApiError<T> where T: std::error::Error  {
+impl<T> ApiError<T>
+where
+    T: std::error::Error,
+{
     pub fn new(err: T) -> Self {
-        Self {
-            err,
-        }
+        Self { err }
     }
 }
 
-impl<T> Display for ApiError<T> where T: std::error::Error{
+impl<T> Display for ApiError<T>
+where
+    T: std::error::Error,
+{
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -34,7 +39,10 @@ impl<T> Display for ApiError<T> where T: std::error::Error{
     }
 }
 
-impl<T> std::error::Error for ApiError<T> where T: std::error::Error{
+impl<T> std::error::Error for ApiError<T>
+where
+    T: std::error::Error,
+{
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self.err.source() {
             Some(s) => Some(s),
@@ -43,7 +51,10 @@ impl<T> std::error::Error for ApiError<T> where T: std::error::Error{
     }
 }
 
-impl<T> IntoResponse for ApiError<T> where T: std::error::Error {
+impl<T> IntoResponse for ApiError<T>
+where
+    T: std::error::Error,
+{
     fn into_response(self) -> axum::response::Response {
         (StatusCode::INTERNAL_SERVER_ERROR, self.err.to_string()).into_response()
     }
