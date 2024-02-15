@@ -1,10 +1,13 @@
 use std::borrow::{Borrow, BorrowMut};
 
 use super::errors::ApiError;
-use crate::{database::types::{Payments, RELATIONAL_DATABASE}, eth_rpc::types::Provider};
-use axum::{extract::Path, http::StatusCode, response::IntoResponse , Json};
+use crate::eth_rpc::types::{Endpoints, GetTransactionByHash, Receipt, ETHEREUM_ENDPOINT};
+use crate::{
+    database::types::{Payments, RELATIONAL_DATABASE},
+    eth_rpc::types::Provider,
+};
+use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
 use sqlx::types::time::OffsetDateTime;
-use crate::eth_rpc::types::{Endpoints, GetTransactionByHash, ETHEREUM_ENDPOINT, Receipt};
 
 #[tracing::instrument]
 pub async fn verify_subscription(
@@ -24,11 +27,11 @@ pub async fn verify_subscription(
     if payment_validation.plan_expiration < OffsetDateTime::now_utc() {
         Err(ApiError::new(PaymentError::PaymentExpired))?
     }
-    
+
     Ok((StatusCode::OK, "User payment is valid").into_response())
 }
 
-async fn submit_payment(Json(payload): Json<Payments>)-> Result<() , Box<dyn std::error::Error>>{
+async fn submit_payment(Json(payload): Json<Payments>) -> Result<(), Box<dyn std::error::Error>> {
     let hash = payload.transaction_hash;
     let transaction = GetTransactionByHash::new(hash.to_owned());
     let amount_paid = transaction.data;
@@ -36,9 +39,9 @@ async fn submit_payment(Json(payload): Json<Payments>)-> Result<() , Box<dyn std
     let provider = ETHEREUM_ENDPOINT.get().unwrap();
     let args = GetTransactionByHash::new(hash.to_owned());
     let transaction = provider.get_transaction_by_hash(args).await?;
-    println!("{}", transaction.value);
+    println!("{:?}", transaction);
     Ok(())
-    // Should be corrected to handle the response tho 
+    // Should be corrected to handle the response tho
 }
 
 #[derive(Debug)]
@@ -80,11 +83,13 @@ impl From<sqlx::Error> for ApiError<PaymentError> {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::submit_payment;
-    use crate::{database::types::{Asset, Chain, Payments}, eth_rpc::types::Endpoints};
+    use crate::{
+        database::types::{Asset, Chain, Payments},
+        eth_rpc::types::Endpoints,
+    };
     use sqlx::types::time::OffsetDateTime;
     use std::error::Error;
     // Assuming axum::Json is required for submit_payment signature
@@ -98,17 +103,16 @@ mod tests {
 
         let payment = Payments {
             customer_email: "customer@example.com".to_string(),
-            transaction_hash: "0x10d26a9726e85f6bd33b5a1455219d8d56dd53d105e69e1be062119e8c7808a2".to_string(),
+            transaction_hash: "0x10d26a9726e85f6bd33b5a1455219d8d56dd53d105e69e1be062119e8c7808a2"
+                .to_string(),
             asset: Asset::USDC,
             amount: 1000,
             chain: Chain::Optimism,
             date: OffsetDateTime::now_utc(),
         };
-
-        // Ensure submit_payment accepts axum::Json<Payments>
+        println!("Sending payment"); // Ensure submit_payment accepts axum::Json<Payments>
         submit_payment(Json(payment)).await?;
 
         Ok(())
     }
 }
-
