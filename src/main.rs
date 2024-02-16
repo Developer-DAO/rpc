@@ -51,7 +51,7 @@ async fn main() {
                 .post(generate_api_keys)
                 .delete(delete_key),
         )
-        .layer(from_fn(verify_jwt));
+        .route_layer(from_fn(verify_jwt));
 
     let app = Router::new()
         .route(
