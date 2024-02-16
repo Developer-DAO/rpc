@@ -1,5 +1,3 @@
-use std::borrow::{Borrow, BorrowMut};
-
 use super::errors::ApiError;
 use crate::eth_rpc::types::{Endpoints, GetTransactionByHash, Receipt, ETHEREUM_ENDPOINT};
 use crate::{
@@ -7,7 +5,18 @@ use crate::{
     eth_rpc::types::Provider,
 };
 use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
+use crypto_bigint::U256;
+use crypto_bigint::{Encoding, Limb};
+use hex;
+use num::{BigInt, Num};
+use serde::Serialize;
 use sqlx::types::time::OffsetDateTime;
+use std::borrow::{Borrow, BorrowMut};
+use std::str::FromStr;
+
+pub fn convert_hex_to_dec(hex_str: &str) -> String {
+    BigInt::from_str_radix(hex_str, 16).unwrap().to_string()
+}
 
 #[tracing::instrument]
 pub async fn verify_subscription(
@@ -32,14 +41,15 @@ pub async fn verify_subscription(
 }
 
 async fn submit_payment(Json(payload): Json<Payments>) -> Result<(), Box<dyn std::error::Error>> {
-    let hash = payload.transaction_hash;
-    let transaction = GetTransactionByHash::new(hash.to_owned());
-    let amount_paid = transaction.data;
-    println!("{:?}", amount_paid);
+    // The scope of dis function will be only to recieve the paylad an put that in the db
+    // We will recieve a tx hash so we need to parse that to the correct elements that will be in the database
+    //let hash = payload.transaction_hash; // Just accessing the transa
+    let transaction = GetTransactionByHash::new(payload.transaction_hash.to_owned()); // Assuming it addes it automatically
+    println!(" The hash of the transaction is {:?}", transaction);
     let provider = ETHEREUM_ENDPOINT.get().unwrap();
-    let args = GetTransactionByHash::new(hash.to_owned());
-    let transaction = provider.get_transaction_by_hash(args).await?;
-    println!("{:?}", transaction);
+    let transaction = provider.get_transaction_by_hash(transaction).await?;
+    let dec_str = convert_hex_to_dec(&transaction.value.trim_start_matches("0x"));
+    println!("{:?}", dec_str);
     Ok(())
     // Should be corrected to handle the response tho
 }
