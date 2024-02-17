@@ -157,7 +157,9 @@ pub mod test {
         database::types::RELATIONAL_DATABASE, register_user, routes::types::RegisterUser, Database,
         Email, JWTKey, TcpListener,
     };
+    use argon2::{password_hash::SaltString, Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
     use axum::{routing::post, Router};
+    use crypto_bigint::rand_core::OsRng;
     use dotenvy::dotenv;
     use lettre::{
         message::{header::ContentType, Mailbox},
@@ -165,6 +167,19 @@ pub mod test {
         Message, Transport,
     };
     use rand::{rngs::ThreadRng, Rng};
+
+    #[test]
+    fn hash_test() -> Result<(), Box<dyn std::error::Error>> {
+        let hashed_pass: String = {
+            let salt = SaltString::generate(&mut OsRng);
+            Argon2::default()
+                .hash_password("testing_password".as_bytes(), &salt).unwrap()
+                .to_string()
+        };
+
+        Argon2::default().verify_password("testing_password".as_bytes(), &PasswordHash::new(&hashed_pass).unwrap()).unwrap();
+        Ok(())
+    }
 
     #[tokio::test]
     async fn register() -> Result<(), Box<dyn std::error::Error>> {
