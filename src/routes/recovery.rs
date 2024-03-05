@@ -178,7 +178,20 @@ impl Display for RecoveryError {
     }
 }
 
-impl Error for RecoveryError {}
+impl Error for RecoveryError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            RecoveryError::DatabaseError(e) => Some(e),
+            RecoveryError::UserNotFound => None,
+            RecoveryError::AccountNotActivated => None,
+            RecoveryError::EmailTransportError(e) => Some(e),
+            RecoveryError::EmailError(e) => Some(e),
+            RecoveryError::EmailAddressError(e) => Some(e),
+            RecoveryError::IncorrectCode(_) => None, 
+            RecoveryError::ParsingError(e) => Some(e),
+        }
+    }
+}
 
 impl From<sqlx::Error> for ApiError<RecoveryError> {
     fn from(value: sqlx::Error) -> Self {
