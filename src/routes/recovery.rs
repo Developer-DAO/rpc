@@ -117,7 +117,7 @@ pub async fn update_password(
         Err(ApiError::new(RecoveryError::AccountNotActivated))?
     }
 
-    if &payload.code != &account.verificationcode {
+    if payload.code != account.verificationcode {
         Err(ApiError::new(RecoveryError::IncorrectCode(
             payload.code.parse::<u32>()?,
         )))?
