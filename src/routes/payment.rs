@@ -8,6 +8,7 @@ use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
 use crypto_bigint::Uint;
 use crypto_bigint::{Encoding, Limb};
 use hex;
+use num::traits::SaturatingMul;
 use num::{BigInt, Num};
 use serde::Serialize;
 use sqlx::types::time::OffsetDateTime;
@@ -41,21 +42,15 @@ pub async fn verify_subscription(
     Ok((StatusCode::OK, "User payment is valid").into_response())
 }
 
-async fn submit_payment(Json(payload): Json<Payments>) -> Result<(), Box<dyn std::error::Error>> {
-    // The scope of dis function will be only to recieve the paylad an put that in the db
-    // We will recieve a tx hash so we need to parse that to the correct elements that will be in the database
-    //let hash = payload.transaction_hash; // Just accessing the transa
+async fn submit_payment(Json(payload): Json<Payments>) -> Result<impl IntoResponse, Box<dyn std::error::Error>> {
+    // Take in mind the struct that will be in the db
     let transaction = GetTransactionByHash::new(payload.transaction_hash.to_owned()); // Assuming it addes it automatically
-    println!(" The hash of the transaction is {:?}", transaction);
     let provider = ETHEREUM_ENDPOINT.get().unwrap();
     let transaction = provider.get_transaction_by_hash(transaction).await?;
-    let uint : Uint<16>= Uint::from_be_hex(&transaction.value.trim_start_matches("0x") );
-    let dec_str = convert_hex_to_dec(&transaction.value.trim_start_matches("0x"));
-    let txvalue = transaction.value.as_bytes();
-    
-    println!("{:?}" , uint);
-    println!("{:?}", dec_str);
-    Ok(())
+    println!("{:?}" , &transaction.value.trim_start_matches("0x"));
+    let tx_value = convert_hex_to_dec(&transaction.value.trim_start_matches("0x"));
+    println!("{:?}" , tx_value); // wei value 10.^18
+    Ok((StatusCode::OK , "User payment submitted").into_response())
     // Should be corrected to handle the response tho
 }
 
@@ -92,9 +87,44 @@ impl std::error::Error for PaymentError {
     }
 }
 
+
 impl From<sqlx::Error> for ApiError<PaymentError> {
     fn from(value: sqlx::Error) -> Self {
         ApiError::new(PaymentError::DatabaseError(value))
+    }
+}
+
+//Error handling for submitPayment
+#[derive(Debug)]
+pub enum submitPaymentError{
+    TxDataError,
+    AmountError,
+    DatabaseError(sqlx::Error),
+}
+
+impl std::fmt::Display for submitPaymentError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            submitPaymentError::TxDataError => write!(f, "Can't get data from Tx"),
+            submitPaymentError::DatabaseError(e) => write!(f, "{}", e),
+            submitPaymentError::AmountError => write!(f, "Can't parse value from Tx"),
+        }
+    }
+}
+
+impl std::error::Error for submitPaymentError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            submitPaymentError::TxDataError => None,
+            submitPaymentError::DatabaseError(e) => Some(e),
+            submitPaymentError::AmountError => None,
+        }
+    }
+}
+
+impl From<sqlx::Error> for ApiError<submitPaymentError> {
+    fn from(value: sqlx::Error) -> Self {
+        ApiError::new(submitPaymentError::DatabaseError(value))
     }
 }
 
@@ -115,7 +145,7 @@ mod tests {
         // Assuming Endpoints::init() exists and is necessary
         // Replace with actual initialization if required
         Endpoints::init()?;
-
+        // I would treat this like the struc is the input of my function 
         let payment = Payments {
             customer_email: "customer@example.com".to_string(),
             transaction_hash: "0x10d26a9726e85f6bd33b5a1455219d8d56dd53d105e69e1be062119e8c7808a2"
