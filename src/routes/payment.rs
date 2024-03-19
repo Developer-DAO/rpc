@@ -5,7 +5,7 @@ use crate::{
     eth_rpc::types::Provider,
 };
 use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
-use crypto_bigint::U256;
+use crypto_bigint::Uint;
 use crypto_bigint::{Encoding, Limb};
 use hex;
 use num::{BigInt, Num};
@@ -13,6 +13,7 @@ use serde::Serialize;
 use sqlx::types::time::OffsetDateTime;
 use std::borrow::{Borrow, BorrowMut};
 use std::str::FromStr;
+
 
 pub fn convert_hex_to_dec(hex_str: &str) -> String {
     BigInt::from_str_radix(hex_str, 16).unwrap().to_string()
@@ -48,7 +49,11 @@ async fn submit_payment(Json(payload): Json<Payments>) -> Result<(), Box<dyn std
     println!(" The hash of the transaction is {:?}", transaction);
     let provider = ETHEREUM_ENDPOINT.get().unwrap();
     let transaction = provider.get_transaction_by_hash(transaction).await?;
+    let uint : Uint<16>= Uint::from_be_hex(&transaction.value.trim_start_matches("0x") );
     let dec_str = convert_hex_to_dec(&transaction.value.trim_start_matches("0x"));
+    let txvalue = transaction.value.as_bytes();
+    
+    println!("{:?}" , uint);
     println!("{:?}", dec_str);
     Ok(())
     // Should be corrected to handle the response tho
