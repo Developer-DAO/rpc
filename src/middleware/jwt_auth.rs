@@ -4,7 +4,7 @@ use std::{
     ops::Deref,
 };
 
-use axum::{extract::Request, http::HeaderMap, middleware::Next, response::Response};
+use axum::{extract::Request, http::{HeaderMap, HeaderName}, middleware::Next, response::Response};
 use jwt_simple::algorithms::MACLike;
 
 use crate::routes::{
@@ -18,7 +18,7 @@ pub async fn verify_jwt(
     next: Next,
 ) -> Result<Response, ApiError<JwtAuthError>> {
     let jwt = headers
-        .get("Authorization")
+        .get(HeaderName::from_static("Authorization"))
         .ok_or_else(|| ApiError::new(JwtAuthError::InvalidHeader))?;
 
     let decoded_token = JWT_KEY

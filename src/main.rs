@@ -7,6 +7,7 @@ use crate::routes::{
     payment::verify_subscription,
     pk_login::{pk_login_challenge, pk_login_response},
     register::register_user,
+    recovery::{update_password, recover_password_email},
 };
 use axum::{
     http::{header, StatusCode},
@@ -51,7 +52,7 @@ async fn main() {
                 .post(generate_api_keys)
                 .delete(delete_key),
         )
-        .layer(from_fn(verify_jwt));
+        .route_layer(from_fn(verify_jwt));
 
     let app = Router::new()
         .route(
@@ -63,6 +64,7 @@ async fn main() {
         .route("/activate", post(activate_account))
         .route("/login", post(user_login))
         .route("/pk_login", get(pk_login_challenge).post(pk_login_response))
+        .route("/recovery", get(recover_password_email).post(update_password))
         .merge(api_keys)
         .layer(cors);
     info!("Initialized D_D RPC on 0.0.0.0:3000");

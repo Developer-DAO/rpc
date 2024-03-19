@@ -47,7 +47,10 @@ pub async fn validate_subscription_and_update_user_calls(
     if sub_info.plan_expiration < OffsetDateTime::now_utc() {
         Err(ApiError::new(RpcAuthErrors::PaymentExpired))?
     }
-
+    
+     
+    // check callcount  
+    
     let ret = next.run(request).await;
 
     sqlx::query!(
