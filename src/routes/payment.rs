@@ -1,5 +1,5 @@
 use super::errors::ApiError;
-use crate::eth_rpc::types::{Endpoints, GetTransactionByHash, Receipt, ETHEREUM_ENDPOINT};
+use crate::eth_rpc::types::{Chains, Endpoints, GetTransactionByHash, Receipt, ETHEREUM_ENDPOINT};
 use crate::{
     database::types::{Payments, RELATIONAL_DATABASE},
     eth_rpc::types::Provider,
@@ -8,12 +8,14 @@ use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
 use crypto_bigint::Uint;
 use crypto_bigint::{Encoding, Limb};
 use hex;
+use jwt_simple::reexports::anyhow::Chain;
 use num::traits::SaturatingMul;
 use num::{BigInt, Num};
 use serde::Serialize;
 use sqlx::types::time::OffsetDateTime;
 use std::borrow::{Borrow, BorrowMut};
 use std::str::FromStr;
+use crate::database::types::{Chain as Chainlist, FromHexStr};
 
 
 pub fn convert_hex_to_dec(hex_str: &str) -> String {
@@ -46,10 +48,18 @@ async fn submit_payment(Json(payload): Json<Payments>) -> Result<impl IntoRespon
     // Take in mind the struct that will be in the db
     let transaction = GetTransactionByHash::new(payload.transaction_hash.to_owned()); // Assuming it addes it automatically
     let provider = ETHEREUM_ENDPOINT.get().unwrap();
-    let transaction = provider.get_transaction_by_hash(transaction).await?;
-    println!("{:?}" , &transaction.value.trim_start_matches("0x"));
-    let tx_value = convert_hex_to_dec(&transaction.value.trim_start_matches("0x"));
-    println!("{:?}" , tx_value); // wei value 10.^18
+    // Let's check if we can automate obtaining the fields and constructing the struct
+    let tx = provider.get_transaction_by_hash(&transaction).await?;
+    let chain = Chainlist::from_hex(&tx.chain_id);
+    println!("Chain id {:?}" , chain);
+    println!("This is the transaction by hash Response {:?}" , &tx);
+    let tx_value = convert_hex_to_dec(&tx.value.trim_start_matches("0x"));
+    println!("Tx value {:?}" , tx_value); // wei value 10.^18
+    // We need to construct the receipt first
+    let receipt = Receipt(transaction);
+    //println!("This is the receipt of the transaction {:?}" , response);
+    let response = provider.get_transaction_receipt(receipt).await?;
+    println!("This is the receipt of the transaction {:?}" , response);
     Ok((StatusCode::OK , "User payment submitted").into_response())
     // Should be corrected to handle the response tho
 }
@@ -96,35 +106,35 @@ impl From<sqlx::Error> for ApiError<PaymentError> {
 
 //Error handling for submitPayment
 #[derive(Debug)]
-pub enum submitPaymentError{
+pub enum SubmitPaymentError{
     TxDataError,
     AmountError,
     DatabaseError(sqlx::Error),
 }
 
-impl std::fmt::Display for submitPaymentError {
+impl std::fmt::Display for SubmitPaymentError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            submitPaymentError::TxDataError => write!(f, "Can't get data from Tx"),
-            submitPaymentError::DatabaseError(e) => write!(f, "{}", e),
-            submitPaymentError::AmountError => write!(f, "Can't parse value from Tx"),
+            SubmitPaymentError::TxDataError => write!(f, "Can't get data from Tx"),
+            SubmitPaymentError::DatabaseError(e) => write!(f, "{}", e),
+            SubmitPaymentError::AmountError => write!(f, "Can't parse value from Tx"),
         }
     }
 }
 
-impl std::error::Error for submitPaymentError {
+impl std::error::Error for SubmitPaymentError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            submitPaymentError::TxDataError => None,
-            submitPaymentError::DatabaseError(e) => Some(e),
-            submitPaymentError::AmountError => None,
+            SubmitPaymentError::TxDataError => None,
+            SubmitPaymentError::DatabaseError(e) => Some(e),
+            SubmitPaymentError::AmountError => None,
         }
     }
 }
 
-impl From<sqlx::Error> for ApiError<submitPaymentError> {
+impl From<sqlx::Error> for ApiError<SubmitPaymentError> {
     fn from(value: sqlx::Error) -> Self {
-        ApiError::new(submitPaymentError::DatabaseError(value))
+        ApiError::new(SubmitPaymentError::DatabaseError(value))
     }
 }
 
@@ -148,7 +158,7 @@ mod tests {
         // I would treat this like the struc is the input of my function 
         let payment = Payments {
             customer_email: "customer@example.com".to_string(),
-            transaction_hash: "0x10d26a9726e85f6bd33b5a1455219d8d56dd53d105e69e1be062119e8c7808a2"
+            transaction_hash: "0x4c2b88848868719dfc1349cdd2bed1e73eab59e30910f61cdf33f1b37217b55d"
                 .to_string(),
             asset: Asset::USDC,
             amount: 1000,

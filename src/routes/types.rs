@@ -68,6 +68,7 @@ impl Normalize for RegisterUser {
     }
 }
 
+
 //pub struct UserPayment{
   //  pub 
 //}

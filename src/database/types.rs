@@ -4,7 +4,7 @@ use std::fmt::Display;
 use std::str::FromStr;
 use std::sync::OnceLock;
 
-use super::errors::ParsingError;
+use super::errors::{ChainidError, ParsingError};
 
 pub static RELATIONAL_DATABASE: OnceLock<Pool<Postgres>> = OnceLock::new();
 
@@ -133,6 +133,30 @@ impl FromStr for Chain {
         Ok(plan)
     }
 }
+// Define the trait FromHexStr
+pub trait FromHexStr {
+    type Err;
+
+    fn from_hex(s: &str) -> Result<Self, Self::Err>
+    where
+        Self: Sized;
+}
+
+impl FromHexStr for Chain {
+    type Err = ChainidError;
+
+    fn from_hex(s: &str) -> Result<Self, Self::Err> {
+        let chain = match s {
+            "0xa" => Chain::Optimism,
+            "0x89" => Chain::Polygon,
+            "0x2105" => Chain::Base,
+            "0xa4b1" => Chain::Arbitrum,
+            _ => return Err(ChainidError(s.to_string(), "Invalid ChainId")),
+        };
+
+        Ok(chain)
+    }
+}
 
 #[derive(Debug, Clone, sqlx::Type, Serialize, Deserialize)]
 #[sqlx(type_name = "ROLE", rename_all = "lowercase")]
@@ -182,3 +206,5 @@ impl FromStr for Asset {
         Ok(plan)
     }
 }
+
+

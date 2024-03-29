@@ -88,7 +88,7 @@ pub struct RawGetTransactionByHashResponse {
     access_list: serde_json::Value,
     block_hash: String,
     block_number: String,
-    chain_id: String,
+    pub chain_id: String,
     from: String,
     gas: String,
     gas_price: String,
@@ -203,7 +203,7 @@ impl Provider {
 
     pub async fn get_transaction_by_hash(
         &self,
-        args: GetTransactionByHash,
+        args: &GetTransactionByHash,
     ) -> Result<RawGetTransactionByHashResponse, EthCallError> {
         let res = args.call(&self.url).await?.result.result;
         Ok(res)
