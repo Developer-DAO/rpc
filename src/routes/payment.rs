@@ -43,15 +43,16 @@ pub async fn verify_subscription(
 
     Ok((StatusCode::OK, "User payment is valid").into_response())
 }
-
-async fn submit_payment(Json(payload): Json<Payments>) -> Result<impl IntoResponse, Box<dyn std::error::Error>> {
+//Previous arg payload): Json<Payments>)
+async fn process_payment( txhash: &str) -> Result<impl IntoResponse, Box<dyn std::error::Error>> {
     // Take in mind the struct that will be in the db
-    let transaction = GetTransactionByHash::new(payload.transaction_hash.to_owned()); // Assuming it addes it automatically
+    let transaction = GetTransactionByHash::new(txhash.to_owned()); // Assuming it addes it automatically
     let provider = ETHEREUM_ENDPOINT.get().unwrap();
-    // Let's check if we can automate obtaining the fields and constructing the struct
     let tx = provider.get_transaction_by_hash(&transaction).await?;
     let chain = Chainlist::from_hex(&tx.chain_id);
     println!("Chain id {:?}" , chain);
+    // If not 0 in value check call inpit to extract usdc info 
+    //Amount for ether is the value and for token should be in call data 
     println!("This is the transaction by hash Response {:?}" , &tx);
     let tx_value = convert_hex_to_dec(&tx.value.trim_start_matches("0x"));
     println!("Tx value {:?}" , tx_value); // wei value 10.^18
@@ -63,6 +64,9 @@ async fn submit_payment(Json(payload): Json<Payments>) -> Result<impl IntoRespon
     Ok((StatusCode::OK , "User payment submitted").into_response())
     // Should be corrected to handle the response tho
 }
+
+//async fn insert_payment(){}
+// fn submit_payment(){}
 
 #[derive(Debug)]
 struct PaymentValidation {
@@ -140,10 +144,9 @@ impl From<sqlx::Error> for ApiError<SubmitPaymentError> {
 
 #[cfg(test)]
 mod tests {
-    use super::submit_payment;
     use crate::{
         database::types::{Asset, Chain, Payments},
-        eth_rpc::types::Endpoints,
+        eth_rpc::types::Endpoints, routes::payment::process_payment,
     };
     use sqlx::types::time::OffsetDateTime;
     use std::error::Error;
@@ -154,11 +157,12 @@ mod tests {
     async fn get_tx_by_hash() -> Result<(), Box<dyn Error>> {
         // Assuming Endpoints::init() exists and is necessary
         // Replace with actual initialization if required
+        
         Endpoints::init()?;
         // I would treat this like the struc is the input of my function 
         let payment = Payments {
             customer_email: "customer@example.com".to_string(),
-            transaction_hash: "0x4c2b88848868719dfc1349cdd2bed1e73eab59e30910f61cdf33f1b37217b55d"
+            transaction_hash: "0xc9abd0b9745ca40417bad813cc012114b81f043ee7215db168f28f21abf7bafe"
                 .to_string(),
             asset: Asset::USDC,
             amount: 1000,
@@ -166,7 +170,8 @@ mod tests {
             date: OffsetDateTime::now_utc(),
         };
         println!("Sending payment"); // Ensure submit_payment accepts axum::Json<Payments>
-        submit_payment(Json(payment)).await?;
+        let arg1 ="0x10d26a9726e85f6bd33b5a1455219d8d56dd53d105e69e1be062119e8c7808a2";
+        process_payment(arg1).await?;
 
         Ok(())
     }
