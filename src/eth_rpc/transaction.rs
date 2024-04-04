@@ -7,12 +7,12 @@ use super::{
     errors::EthCallError,
     types::{
         EthCall, GetTransactionByHash, RawGetTransactionByHashResponse,
-        RawGetTransactionReceiptResponse, Receipt, ResultWrapper,
+        RawGetTransactionReceiptResponse, Receipt,
     },
 };
 
 impl EthCall for GetTransactionByHash {
-    type Inner = JsonRpcResponse<ResultWrapper<RawGetTransactionByHashResponse>>;
+    type Inner = JsonRpcResponse<RawGetTransactionByHashResponse>;
 
     async fn call(&self, provider: &Uri) -> Result<Self::Inner, EthCallError> {
         let res = reqwest::Client::new()
@@ -32,7 +32,7 @@ impl EthCall for GetTransactionByHash {
     }
 }
 impl EthCall for Receipt {
-    type Inner = JsonRpcResponse<ResultWrapper<RawGetTransactionReceiptResponse>>;
+    type Inner = JsonRpcResponse<RawGetTransactionReceiptResponse>;
 
     async fn call(&self, provider: &Uri) -> Result<Self::Inner, EthCallError> {
         let res = reqwest::Client::new()
@@ -63,7 +63,7 @@ pub mod tests {
         let hash = "0x10d26a9726e85f6bd33b5a1455219d8d56dd53d105e69e1be062119e8c7808a2";
         let provider = ETHEREUM_ENDPOINT.get().unwrap();
         let args = GetTransactionByHash::new(hash.to_owned());
-        provider.get_transaction_by_hash(args).await?;
+        println!("{:?}", provider.get_transaction_by_hash(args).await?);
         Ok(())
     }
     #[tokio::test]

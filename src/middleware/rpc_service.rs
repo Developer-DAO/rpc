@@ -1,44 +1,72 @@
 use crate::{
-    database::types::{Api, RELATIONAL_DATABASE},
+    database::types::{Plan, RELATIONAL_DATABASE},
     routes::errors::ApiError,
 };
 use axum::{
-    extract::{Query, Request},
+    extract::{Path, Request},
     middleware::Next,
     response::IntoResponse,
 };
 use core::fmt;
-use sqlx::types::time::OffsetDateTime;
+use sqlx::{prelude::FromRow, types::time::OffsetDateTime, Database, Decode};
 use std::{
     error::Error,
     fmt::{Display, Formatter},
 };
 
-#[derive(Debug)]
+#[derive(Debug, FromRow)]
 struct SubscriptionInfo {
     plan_expiration: OffsetDateTime,
     callcount: i64,
+    subscription: Plan,
+    customeremail: String,
+}
+
+impl<'r, DB: Database> Decode<'r, DB> for Plan
+where
+    &'r str: Decode<'r, DB>,
+{
+    fn decode(
+        value: <DB as sqlx::database::HasValueRef<'r>>::ValueRef,
+    ) -> Result<Self, sqlx::error::BoxDynError> {
+        let value = <&str as Decode<DB>>::decode(value)?;
+        Ok(match value {
+            "gigachad" => Plan::Gigachad,
+            "premier" => Plan::Premier,
+            "based" => Plan::Based,
+            _ => Plan::None,
+        })
+    }
+}
+
+impl Plan {
+    // these are arbitrary numbers for now 
+    pub fn calls_per_month(&self) -> u64 {
+        match self {
+            Plan::None => 0,
+            Plan::Based => 3_000_000,
+            Plan::Premier => 50_000_000,
+            Plan::Gigachad => 420_690_000,
+        }
+    }
 }
 
 pub async fn validate_subscription_and_update_user_calls(
-    Query(key): Query<String>,
+    Path(key): Path<[String; 2]>,
     request: Request,
     next: Next,
 ) -> Result<impl IntoResponse, ApiError<RpcAuthErrors>> {
     let db_connection = RELATIONAL_DATABASE.get().unwrap();
 
-    let res = sqlx::query_as!(Api, "SELECT * FROM Api WHERE apiKey = $1", key)
-        .fetch_optional(db_connection)
-        .await?
-        .ok_or_else(|| ApiError::new(RpcAuthErrors::InvalidApiKey))?;
-
     let sub_info: SubscriptionInfo = sqlx::query_as!(
         SubscriptionInfo,
-        "SELECT PaymentInfo.planExpiration AS plan_expiration,
-        callCount
+        r#"SELECT PaymentInfo.planExpiration AS plan_expiration,
+        callCount,
+        subscription as "subscription: Plan",
+        PaymentInfo.customerEmail
         FROM PaymentInfo
-        WHERE PaymentInfo.customerEmail = $1",
-        &res.customeremail
+        WHERE PaymentInfo.customerEmail = (SELECT customerEmail FROM Api WHERE apiKey = $1)"#,
+        &key[1] 
     )
     .fetch_optional(db_connection)
     .await?
@@ -47,20 +75,25 @@ pub async fn validate_subscription_and_update_user_calls(
     if sub_info.plan_expiration < OffsetDateTime::now_utc() {
         Err(ApiError::new(RpcAuthErrors::PaymentExpired))?
     }
-    
-     
-    // check callcount  
-    
-    let ret = next.run(request).await;
 
+    // check callcount
+    if u64::try_from(sub_info.callcount).unwrap_or_else(|_| 0)
+        >= sub_info.subscription.calls_per_month()
+    {
+        Err(ApiError::new(RpcAuthErrors::PlanLimitReached))?
+    }
+
+    // We may be able to further reduce the number of queries made in this critical path by moving
+    // this to a different thread altogether instead of blocking execution
     sqlx::query!(
         "UPDATE PaymentInfo set callCount = $1 WHERE customerEmail = $2",
         sub_info.callcount + 1,
-        res.customeremail,
+        sub_info.customeremail,
     )
     .execute(db_connection)
     .await?;
 
+    let ret = next.run(request).await;
     Ok(ret)
 }
 
@@ -70,6 +103,7 @@ pub enum RpcAuthErrors {
     DatabaseError(sqlx::Error),
     PaymentExpired,
     PaymentNotFound,
+    PlanLimitReached,
 }
 
 impl Display for RpcAuthErrors {
@@ -82,6 +116,7 @@ impl Display for RpcAuthErrors {
             ),
             RpcAuthErrors::PaymentExpired => write!(f, "The user's plan has expired. Please resubscribe if you enjoy our service. Thank you for choosing the Developer DAO RPC"),
             RpcAuthErrors::PaymentNotFound => write!(f, "Payment not found. Please enter manually."),
+            RpcAuthErrors::PlanLimitReached => write!(f, "The current call could not be processed because this account reached it monthly limit. Please upgrade your plan with us!")
         }
     }
 }
@@ -93,6 +128,7 @@ impl Error for RpcAuthErrors {
             RpcAuthErrors::DatabaseError(e) => Some(e),
             RpcAuthErrors::PaymentExpired => None,
             RpcAuthErrors::PaymentNotFound => None,
+            RpcAuthErrors::PlanLimitReached => None,
         }
     }
 }
