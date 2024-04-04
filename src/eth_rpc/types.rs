@@ -57,11 +57,6 @@ impl Receipt {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct ResultWrapper<T> {
-    result: T,
-}
-
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RawGetTransactionReceiptResponse {
@@ -85,6 +80,7 @@ pub struct RawGetTransactionReceiptResponse {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RawGetTransactionByHashResponse {
+    #[serde(skip)]
     access_list: serde_json::Value,
     block_hash: String,
     block_number: String,
@@ -94,8 +90,8 @@ pub struct RawGetTransactionByHashResponse {
     gas_price: String,
     hash: String,
     input: String,
-    max_fee_per_gas: String,
-    max_priority_fee_per_gas: String,
+    max_fee_per_gas: Option<String>,
+    max_priority_fee_per_gas: Option<String>,
     nonce: String,
     to: String,
     transaction_index: String,
@@ -116,6 +112,7 @@ pub struct Transfer {
 }
 
 impl FromStr for Transfer {
+    // Optimization: Remove trait object and replace with concrete errors (an enum of sorts)
     type Err = Box<dyn std::error::Error>;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -126,7 +123,7 @@ impl FromStr for Transfer {
         let bytes = decode(&s[2..])?;
         let to = &bytes[16..36];
         let amount = U256::from_be_slice(&bytes[36..]);
-        let addy = format!("{}{}", "0x", encode(to));
+        let addy = format!("0x{}", encode(to));
         Ok(Transfer {
             to: Address::from_str(&addy)?,
             amount,
@@ -205,7 +202,7 @@ impl Provider {
         &self,
         args: &GetTransactionByHash,
     ) -> Result<RawGetTransactionByHashResponse, EthCallError> {
-        let res = args.call(&self.url).await?.result.result;
+        let res = args.call(&self.url).await?.result;
         Ok(res)
     }
 
@@ -213,7 +210,7 @@ impl Provider {
         &self,
         args: Receipt,
     ) -> Result<RawGetTransactionReceiptResponse, EthCallError> {
-        let res = args.call(&self.url).await?.result.result;
+        let res = args.call(&self.url).await?.result;
         Ok(res)
     }
 }

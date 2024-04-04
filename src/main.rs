@@ -1,4 +1,6 @@
-use crate::middleware::jwt_auth::verify_jwt;
+use crate::middleware::{
+    jwt_auth::verify_jwt, rpc_service::validate_subscription_and_update_user_calls,
+};
 use crate::routes::types::{Email, JWTKey};
 use crate::routes::{
     activate::activate_account,
@@ -6,8 +8,9 @@ use crate::routes::{
     login::user_login,
     payment::verify_subscription,
     pk_login::{pk_login_challenge, pk_login_response},
+    recovery::{recover_password_email, update_password},
     register::register_user,
-    recovery::{update_password, recover_password_email},
+    relayer::router::route_call,
 };
 use axum::{
     http::{header, StatusCode},
@@ -44,7 +47,9 @@ async fn main() {
         .allow_origin(Any)
         .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION])
         .allow_methods(Any);
-
+    let relayer = Router::new()
+        .route("/rpc/:chain/:api_key", post(route_call))
+        .route_layer(from_fn(validate_subscription_and_update_user_calls));
     let api_keys = Router::new()
         .route(
             "/api/keys",
@@ -64,8 +69,12 @@ async fn main() {
         .route("/activate", post(activate_account))
         .route("/login", post(user_login))
         .route("/pk_login", get(pk_login_challenge).post(pk_login_response))
-        .route("/recovery", get(recover_password_email).post(update_password))
+        .route(
+            "/recovery",
+            get(recover_password_email).post(update_password),
+        )
         .merge(api_keys)
+        .merge(relayer)
         .layer(cors);
     info!("Initialized D_D RPC on 0.0.0.0:3000");
     let listener = TcpListener::bind("0.0.0.0:3000").await.unwrap();

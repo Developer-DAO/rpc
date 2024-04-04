@@ -4,7 +4,6 @@ use serde::{Deserialize, Serialize};
 pub struct JsonRpcResponse<T> {
     pub jsonrpc: String,
     pub id: u16,
-    #[serde(flatten)]
     pub result: T,
 }
 

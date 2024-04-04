@@ -7,10 +7,10 @@ use std::{
 use axum::{extract::Request, http::{HeaderMap, HeaderName}, middleware::Next, response::Response};
 use jwt_simple::algorithms::MACLike;
 
-use crate::routes::{
+use crate::{database::types::Plan, routes::{
     errors::ApiError,
     types::{Claims, JWT_KEY},
-};
+}};
 
 pub async fn verify_jwt(
     headers: HeaderMap,

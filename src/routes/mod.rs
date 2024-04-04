@@ -7,3 +7,4 @@ pub mod pk_login;
 pub mod register;
 pub mod types;
 pub mod recovery; 
+pub mod relayer;
