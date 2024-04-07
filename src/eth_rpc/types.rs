@@ -1,8 +1,9 @@
 use crate::{database::errors::ParsingError, eth_rpc::errors::EthCallError};
 use axum::http::Uri;
-use crypto_bigint::U256;
+use crypto_bigint::{U256, U64};
 use hex::{decode, encode};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::{future::Future, str::FromStr, sync::OnceLock};
 
@@ -70,7 +71,9 @@ pub struct RawGetTransactionReceiptResponse {
     effective_gas_price: String,
     gas_used: String,
     contract_address: Option<String>,
-    logs: Vec<String>,
+    // if we need logs in the future, we should create a type and parse them into 
+    // something more meaningful than JSON
+    logs: serde_json::Value,
     logs_bloom: String,
     #[serde(rename = "type")]
     tx_type: String,
