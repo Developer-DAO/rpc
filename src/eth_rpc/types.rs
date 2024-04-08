@@ -1,9 +1,8 @@
 use crate::{database::errors::ParsingError, eth_rpc::errors::EthCallError};
 use axum::http::Uri;
-use crypto_bigint::{U256, U64};
+use crypto_bigint::U256;
 use hex::{decode, encode};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::{future::Future, str::FromStr, sync::OnceLock};
 
@@ -83,8 +82,6 @@ pub struct RawGetTransactionReceiptResponse {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RawGetTransactionByHashResponse {
-    #[serde(skip)]
-    access_list: serde_json::Value,
     block_hash: String,
     block_number: String,
     chain_id: String,

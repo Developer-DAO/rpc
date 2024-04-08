@@ -31,16 +31,17 @@ where
     ) -> Result<Self, sqlx::error::BoxDynError> {
         let value = <&str as Decode<DB>>::decode(value)?;
         Ok(match value {
-            "gigachad" => Plan::Gigachad,
-            "premier" => Plan::Premier,
-            "based" => Plan::Based,
+            "gigachad" | "Gigachad" => Plan::Gigachad,
+            "premier" | "Premier" => Plan::Premier,
+            "based" | "Based" => Plan::Based,
             _ => Plan::None,
         })
     }
 }
 
 impl Plan {
-    // these are arbitrary numbers for now 
+    // todo
+    // these are arbitrary numbers for now
     pub fn calls_per_month(&self) -> u64 {
         match self {
             Plan::None => 0,
@@ -66,7 +67,7 @@ pub async fn validate_subscription_and_update_user_calls(
         PaymentInfo.customerEmail
         FROM PaymentInfo
         WHERE PaymentInfo.customerEmail = (SELECT customerEmail FROM Api WHERE apiKey = $1)"#,
-        &key[1] 
+        key.get(0).ok_or_else(|| ApiError::new(RpcAuthErrors::InvalidApiKey))?
     )
     .fetch_optional(db_connection)
     .await?
@@ -76,10 +77,9 @@ pub async fn validate_subscription_and_update_user_calls(
         Err(ApiError::new(RpcAuthErrors::PaymentExpired))?
     }
 
+    let absv = sub_info.callcount.unsigned_abs();
     // check callcount
-    if u64::try_from(sub_info.callcount).unwrap_or_else(|_| 0)
-        >= sub_info.subscription.calls_per_month()
-    {
+    if absv >= sub_info.subscription.calls_per_month() {
         Err(ApiError::new(RpcAuthErrors::PlanLimitReached))?
     }
 

@@ -12,6 +12,7 @@ use crate::routes::{
     register::register_user,
     relayer::router::route_call,
 };
+// use crate::routes::relayer:: types::PoktChains;
 use axum::{
     http::{header, StatusCode},
     middleware::from_fn,
@@ -34,6 +35,7 @@ pub mod routes;
 #[tokio::main]
 async fn main() {
     dotenv().unwrap();
+    // PoktChains::init_deployment_url();
     JWTKey::init().unwrap();
     Database::init(None).await.unwrap();
     Email::init().unwrap();
@@ -78,7 +80,6 @@ async fn main() {
         .layer(cors);
     info!("Initialized D_D RPC on 0.0.0.0:3000");
     let listener = TcpListener::bind("0.0.0.0:3000").await.unwrap();
-
     axum::serve(listener, app).await.unwrap();
 }
 
