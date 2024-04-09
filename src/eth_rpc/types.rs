@@ -71,7 +71,7 @@ pub struct RawGetTransactionReceiptResponse {
     effective_gas_price: String,
     gas_used: String,
     contract_address: Option<String>,
-    // if we need logs in the future, we should create a type and parse them into 
+    // if we need logs in the future, we should create a type and parse them into
     // something more meaningful than JSON
     logs: serde_json::Value,
     logs_bloom: String,
@@ -92,7 +92,7 @@ pub struct RawGetTransactionByHashResponse {
     gas: String,
     gas_price: String,
     hash: String,
-    input: String,
+    pub input: String,
     max_fee_per_gas: Option<String>,
     max_priority_fee_per_gas: Option<String>,
     nonce: String,
@@ -105,8 +105,6 @@ pub struct RawGetTransactionByHashResponse {
     r: String,
     s: String,
 }
-
-
 
 #[derive(Debug, Clone)]
 pub struct Transfer {

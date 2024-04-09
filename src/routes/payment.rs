@@ -1,4 +1,5 @@
 use super::errors::ApiError;
+use crate::database::types::{Chain as Chainlist, FromHexStr};
 use crate::eth_rpc::types::{Chains, Endpoints, GetTransactionByHash, Receipt, ETHEREUM_ENDPOINT};
 use crate::{
     database::types::{Payments, RELATIONAL_DATABASE},
@@ -7,7 +8,9 @@ use crate::{
 use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
 use crypto_bigint::Uint;
 use crypto_bigint::{Encoding, Limb};
+use ethers::signers::yubihsm::Uuid;
 use hex;
+use hex::decode;
 use jwt_simple::reexports::anyhow::Chain;
 use num::traits::SaturatingMul;
 use num::{BigInt, Num};
@@ -15,12 +18,13 @@ use serde::Serialize;
 use sqlx::types::time::OffsetDateTime;
 use std::borrow::{Borrow, BorrowMut};
 use std::str::FromStr;
-use crate::database::types::{Chain as Chainlist, FromHexStr};
-
 
 pub fn convert_hex_to_dec(hex_str: &str) -> String {
     BigInt::from_str_radix(hex_str, 16).unwrap().to_string()
 }
+
+use core::str;
+use ethers::core::utils::hex::FromHex;
 
 #[tracing::instrument]
 pub async fn verify_subscription(
@@ -44,24 +48,32 @@ pub async fn verify_subscription(
     Ok((StatusCode::OK, "User payment is valid").into_response())
 }
 //Previous arg payload): Json<Payments>)
-async fn process_payment( txhash: &str) -> Result<impl IntoResponse, Box<dyn std::error::Error>> {
+async fn process_payment(txhash: &str) -> Result<impl IntoResponse, Box<dyn std::error::Error>> {
     // Take in mind the struct that will be in the db
     let transaction = GetTransactionByHash::new(txhash.to_owned()); // Assuming it addes it automatically
     let provider = ETHEREUM_ENDPOINT.get().unwrap();
     let tx = provider.get_transaction_by_hash(&transaction).await?;
     let chain = Chainlist::from_hex(&tx.chain_id);
-    println!("Chain id {:?}" , chain);
-    // If not 0 in value check call inpit to extract usdc info 
-    //Amount for ether is the value and for token should be in call data 
-    println!("This is the transaction by hash Response {:?}" , &tx);
+    println!("Chain id {:?}", chain);
+    let tx_input = tx.input;
+    println!("{:?}", tx_input);
+    //let tx_decode = hex::decode(tx_input).unwrap();
+    let buffer = <[u8; 12]>::from_hex(tx_input)?;
+    let string = str::from_utf8(&buffer).expect("invalid buffer length");
+
+    println!("decoded {:?}", string);
+    // If not 0 in value check call inpit to extract usdc info
+    //Amount for ether is the value and for token should be in call data
+    //println!("This is the transaction by hash Response {:?}", &tx);
     let tx_value = convert_hex_to_dec(&tx.value.trim_start_matches("0x"));
-    println!("Tx value {:?}" , tx_value); // wei value 10.^18
-    // We need to construct the receipt first
+    println!("Tx value {:?}", tx_value); // wei value 10.^18
+                                         // We need to construct the receipt first
     let receipt = Receipt(transaction);
     //println!("This is the receipt of the transaction {:?}" , response);
     let response = provider.get_transaction_receipt(receipt).await?;
-    println!("This is the receipt of the transaction {:?}" , response);
-    Ok((StatusCode::OK , "User payment submitted").into_response())
+    // let input = response.
+    println!("This is the receipt of the transaction {:?}", response);
+    Ok((StatusCode::OK, "User payment submitted").into_response())
     // Should be corrected to handle the response tho
 }
 
@@ -101,7 +113,6 @@ impl std::error::Error for PaymentError {
     }
 }
 
-
 impl From<sqlx::Error> for ApiError<PaymentError> {
     fn from(value: sqlx::Error) -> Self {
         ApiError::new(PaymentError::DatabaseError(value))
@@ -110,7 +121,7 @@ impl From<sqlx::Error> for ApiError<PaymentError> {
 
 //Error handling for submitPayment
 #[derive(Debug)]
-pub enum SubmitPaymentError{
+pub enum SubmitPaymentError {
     TxDataError,
     AmountError,
     DatabaseError(sqlx::Error),
@@ -146,7 +157,8 @@ impl From<sqlx::Error> for ApiError<SubmitPaymentError> {
 mod tests {
     use crate::{
         database::types::{Asset, Chain, Payments},
-        eth_rpc::types::Endpoints, routes::payment::process_payment,
+        eth_rpc::types::Endpoints,
+        routes::payment::process_payment,
     };
     use sqlx::types::time::OffsetDateTime;
     use std::error::Error;
@@ -157,9 +169,9 @@ mod tests {
     async fn get_tx_by_hash() -> Result<(), Box<dyn Error>> {
         // Assuming Endpoints::init() exists and is necessary
         // Replace with actual initialization if required
-        
+
         Endpoints::init()?;
-        // I would treat this like the struc is the input of my function 
+        // I would treat this like the struc is the input of my function
         let payment = Payments {
             customer_email: "customer@example.com".to_string(),
             transaction_hash: "0xc9abd0b9745ca40417bad813cc012114b81f043ee7215db168f28f21abf7bafe"
@@ -170,7 +182,7 @@ mod tests {
             date: OffsetDateTime::now_utc(),
         };
         println!("Sending payment"); // Ensure submit_payment accepts axum::Json<Payments>
-        let arg1 ="0x10d26a9726e85f6bd33b5a1455219d8d56dd53d105e69e1be062119e8c7808a2";
+        let arg1 = "0xc9abd0b9745ca40417bad813cc012114b81f043ee7215db168f28f21abf7bafe";
         process_payment(arg1).await?;
 
         Ok(())

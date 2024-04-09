@@ -10,6 +10,7 @@ argon2 = "0.5.2"
 axum = "0.7.4"
 crypto-bigint = "0.5.5"
 dotenvy = "0.15.7"
+ethers = {version = "2.0.14" , features = ["yubi"]}
 hex = "0.4.3"
 jwt-simple = { version = "0.12.7", default-features = false, features = ["pure-rust"] }
 lettre = {version = "0.11.4", features = ["rustls-tls"]}
