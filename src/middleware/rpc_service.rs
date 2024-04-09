@@ -13,6 +13,7 @@ use std::{
     error::Error,
     fmt::{Display, Formatter},
 };
+use tokio::join;
 
 #[derive(Debug, FromRow)]
 struct SubscriptionInfo {
@@ -67,7 +68,8 @@ pub async fn validate_subscription_and_update_user_calls(
         PaymentInfo.customerEmail
         FROM PaymentInfo
         WHERE PaymentInfo.customerEmail = (SELECT customerEmail FROM Api WHERE apiKey = $1)"#,
-        key.get(0).ok_or_else(|| ApiError::new(RpcAuthErrors::InvalidApiKey))?
+        key.get(0)
+            .ok_or_else(|| ApiError::new(RpcAuthErrors::InvalidApiKey))?
     )
     .fetch_optional(db_connection)
     .await?
@@ -83,18 +85,20 @@ pub async fn validate_subscription_and_update_user_calls(
         Err(ApiError::new(RpcAuthErrors::PlanLimitReached))?
     }
 
-    // We may be able to further reduce the number of queries made in this critical path by moving
-    // this to a different thread altogether instead of blocking execution
-    sqlx::query!(
+    let increment = sqlx::query!(
         "UPDATE PaymentInfo set callCount = $1 WHERE customerEmail = $2",
         sub_info.callcount + 1,
         sub_info.customeremail,
     )
-    .execute(db_connection)
-    .await?;
+    .execute(db_connection);
 
-    let ret = next.run(request).await;
-    Ok(ret)
+    let ret = next.run(request);
+
+    let (res, inc) = join!(ret, increment);
+
+    inc?;
+
+    Ok(res)
 }
 
 #[derive(Debug)]

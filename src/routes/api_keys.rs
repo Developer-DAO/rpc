@@ -1,7 +1,7 @@
 use super::{errors::ApiError, types::Claims};
 use crate::database::types::{Api, RELATIONAL_DATABASE};
 use axum::{
-    extract::{Extension, Query},
+    extract::{Extension, Path},
     http::StatusCode,
     response::IntoResponse,
 };
@@ -50,8 +50,7 @@ pub struct DeleteKey {
 }
 
 pub async fn delete_key(
-    // http://example.com/api/?key="..."
-    Query(params): Query<String>,
+    Path(params): Path<String>,
 ) -> Result<impl IntoResponse, ApiError<ApiKeyError>> {
     sqlx::query_as!(Api, "DELETE FROM Api where apiKey = $1", params)
         .execute(RELATIONAL_DATABASE.get().unwrap())
@@ -100,3 +99,9 @@ impl From<serde_json::Error> for ApiError<ApiKeyError> {
         ApiError::new(ApiKeyError::JsonError(value))
     }
 }
+
+
+// limits for API key generation to avoid abuse 
+// 
+// maybe scope api key permissions in the future
+
