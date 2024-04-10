@@ -55,13 +55,20 @@ async fn process_payment(txhash: &str) -> Result<impl IntoResponse, Box<dyn std:
     let tx = provider.get_transaction_by_hash(&transaction).await?;
     let chain = Chainlist::from_hex(&tx.chain_id);
     println!("Chain id {:?}", chain);
-    let tx_input = tx.input;
-    println!("{:?}", tx_input);
+    println!("{:?}", tx.input.len());
     //let tx_decode = hex::decode(tx_input).unwrap();
-    let buffer = <[u8; 12]>::from_hex(tx_input)?;
-    let string = str::from_utf8(&buffer).expect("invalid buffer length");
+    // Add a If value is 0 then do 
+    let tx_method = String::with_capacity(138);
+   let method_id = &tx.input[..10];
+   let to = &tx.input[10..74];
+   let value = &tx.input[74..];
 
-    println!("decoded {:?}", string);
+
+   
+// Checking input 
+println!("Method ID: {}", method_id);
+println!("To: {}", to);
+println!("Value: {}", value);
     // If not 0 in value check call inpit to extract usdc info
     //Amount for ether is the value and for token should be in call data
     //println!("This is the transaction by hash Response {:?}", &tx);
@@ -182,7 +189,7 @@ mod tests {
             date: OffsetDateTime::now_utc(),
         };
         println!("Sending payment"); // Ensure submit_payment accepts axum::Json<Payments>
-        let arg1 = "0xc9abd0b9745ca40417bad813cc012114b81f043ee7215db168f28f21abf7bafe";
+        let arg1 = "0x8215cabb4634fac018ce551b20b381c62a6c808510e60eb0595f580fd8b8bf34";
         process_payment(arg1).await?;
 
         Ok(())
