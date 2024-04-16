@@ -1,5 +1,5 @@
 use super::errors::ApiError;
-use crate::database::types::{Asset, Chain as Chainlist, FromHexStr};
+use crate::database::types::{Asset, Chain as Chainlist, Database, FromHexStr};
 use crate::eth_rpc::errors::EthCallError;
 use crate::eth_rpc::types::{Chains, Endpoints, GetTransactionByHash, Receipt, Transfer, ETHEREUM_ENDPOINT};
 use crate::{
@@ -9,6 +9,7 @@ use crate::{
 use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
 use crypto_bigint::Uint;
 use crypto_bigint::{Encoding, Limb};
+use dotenvy::dotenv;
 use ethers::signers::yubihsm::Uuid;
 use hex;
 use hex::decode;
@@ -82,6 +83,7 @@ async fn process_payment(customer_mail: &str , txhash: &str) -> Result<impl Into
     
     } else {
          // Check later if this checks the method id 0xa9059cbb
+        println!("Entering the else statement");
         let res = Transfer::from_str(&tx.input)?;
         let to = res.to;
         let value = res.amount.to_string();
@@ -97,6 +99,7 @@ async fn process_payment(customer_mail: &str , txhash: &str) -> Result<impl Into
             chain: chain,
             date: OffsetDateTime::now_utc(),
         };
+        println!("Inserting payment");
         insert_payment(axum::Json(payment)).await?;
     }
 
@@ -110,6 +113,8 @@ async fn process_payment(customer_mail: &str , txhash: &str) -> Result<impl Into
 }
 
 async fn insert_payment(payment : Json<Payments>) -> Result<impl IntoResponse, ApiError<SubmitPaymentError>>{
+    dotenv().unwrap();
+    Database::init(None).await.unwrap();
     let db_connection = RELATIONAL_DATABASE.get().unwrap();
     sqlx::query!(
         "INSERT INTO Payments(customerEmail, transactionHash, asset, amount, chain, date) 
@@ -217,33 +222,13 @@ mod tests {
         eth_rpc::types::Endpoints,
         routes::payment::process_payment,
     };
-    use jwt_simple::reexports::anyhow::Ok;
     use sqlx::types::time::OffsetDateTime;
     use std::error::Error;
     use axum::response::IntoResponse;
+    use serde::ser::StdError;
+    use std::result::Result::Ok;
     // Assuming axum::Json is required for submit_payment signature
-    #[tokio::test]
-    async fn get_tx_by_hash()  {
-        // Initialization or other preparatory steps
-        Endpoints::init();
-
-        let payment = Payments {
-            customer_email: "customer@example.com".to_string(),
-            transaction_hash: "0xc9abd0b9745ca40417bad813cc012114b81f043ee7215db168f28f21abf7bafe".to_string(),
-            asset: Asset::USDC,
-            amount: 1000,
-            chain: Chain::Optimism,
-            date: OffsetDateTime::now_utc(),
-        };
-
-        println!("Sending payment");
-        let transaction_hash = "0x83dfe9b147285ae709c29c363ad1e415bbcfc21b7c555106308cca0e3bcc67c4";
-
-        // Properly handle the Result returned by process_payment
-        // If process_payment returns Result<(), jwt_simple::Error>, you need to map this error to Box<dyn Error>
-        let result = process_payment(&payment.customer_email, transaction_hash).await;
-       
-    }
+ 
 
     #[tokio::test]
     async fn usdc_tx() -> Result<(), jwt_simple::Error> {
