@@ -68,7 +68,8 @@ pub enum Plan {
     Gigachad,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy , Deserialize, sqlx::Type)]
+#[sqlx(rename_all = "lowercase", type_name = "chain")]
 pub enum Chain {
     Optimism,
     Polygon,
@@ -76,7 +77,8 @@ pub enum Chain {
     Base,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone , Copy , Deserialize, sqlx::Type)]
+#[sqlx(rename_all = "lowercase", type_name = "chain")]
 pub enum Asset {
     Ether,
     USDC,

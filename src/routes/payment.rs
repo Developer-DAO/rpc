@@ -1,6 +1,7 @@
 use super::errors::ApiError;
-use crate::database::types::{Chain as Chainlist, FromHexStr};
-use crate::eth_rpc::types::{Chains, Endpoints, GetTransactionByHash, Receipt, ETHEREUM_ENDPOINT};
+use crate::database::types::{Asset, Chain as Chainlist, FromHexStr};
+use crate::eth_rpc::errors::EthCallError;
+use crate::eth_rpc::types::{Chains, Endpoints, GetTransactionByHash, Receipt, Transfer, ETHEREUM_ENDPOINT};
 use crate::{
     database::types::{Payments, RELATIONAL_DATABASE},
     eth_rpc::types::Provider,
@@ -15,8 +16,12 @@ use jwt_simple::reexports::anyhow::Chain;
 use num::traits::SaturatingMul;
 use num::{BigInt, Num};
 use serde::Serialize;
+use serde_json::from_str;
 use sqlx::types::time::OffsetDateTime;
 use std::borrow::{Borrow, BorrowMut};
+use std::error::Error;
+use std::io;
+use std::ops::Sub;
 use std::str::FromStr;
 
 pub fn convert_hex_to_dec(hex_str: &str) -> String {
@@ -48,44 +53,78 @@ pub async fn verify_subscription(
     Ok((StatusCode::OK, "User payment is valid").into_response())
 }
 //Previous arg payload): Json<Payments>)
-async fn process_payment(txhash: &str) -> Result<impl IntoResponse, Box<dyn std::error::Error>> {
+async fn process_payment(customer_mail: &str , txhash: &str) -> Result<impl IntoResponse, Box<dyn Error>> {
     // Take in mind the struct that will be in the db
+
+    //Note: Do we need to check the input of the chain to match with the chain id?
     let transaction = GetTransactionByHash::new(txhash.to_owned()); // Assuming it addes it automatically
     let provider = ETHEREUM_ENDPOINT.get().unwrap();
     let tx = provider.get_transaction_by_hash(&transaction).await?;
-    let chain = Chainlist::from_hex(&tx.chain_id);
-    println!("Chain id {:?}", chain);
-    println!("{:?}", tx.input.len());
-    //let tx_decode = hex::decode(tx_input).unwrap();
-    // Add a If value is 0 then do 
-    let tx_method = String::with_capacity(138);
-   let method_id = &tx.input[..10];
-   let to = &tx.input[10..74];
-   let value = &tx.input[74..];
 
 
-   
-// Checking input 
-println!("Method ID: {}", method_id);
-println!("To: {}", to);
-println!("Value: {}", value);
-    // If not 0 in value check call inpit to extract usdc info
-    //Amount for ether is the value and for token should be in call data
-    //println!("This is the transaction by hash Response {:?}", &tx);
-    let tx_value = convert_hex_to_dec(&tx.value.trim_start_matches("0x"));
-    println!("Tx value {:?}", tx_value); // wei value 10.^18
-                                         // We need to construct the receipt first
+    println!("This is the transaction hash {:?}" , tx );
+    if tx.input == "0x"{
+        //Let value , tx , amount 
+        let tx_value = convert_hex_to_dec(&tx.value.trim_start_matches("0x"));
+        let tx_asset = Asset::Ether;
+        println!("Tx value {:?}", tx_value); // wei value 10.^18
+        // We should get the two from the receipt 
+        let chain = Chainlist::from_hex(&tx.chain_id)?;
+        let payment = Payments {
+            customer_email: customer_mail.to_owned(),
+            transaction_hash: txhash.to_owned(),
+            asset: tx_asset,
+            amount: from_str(&tx.value)?,
+            chain: chain,
+            date: OffsetDateTime::now_utc(),
+        };
+        insert_payment(axum::Json(payment)).await?;
+    
+    } else {
+         // Check later if this checks the method id 0xa9059cbb
+        let res = Transfer::from_str(&tx.input)?;
+        let to = res.to;
+        let value = res.amount.to_string();
+        let z = i64::from_str_radix(&value, 16)?;
+        let chain = Chainlist::from_hex(&tx.chain_id)?;
+        println!("To {:?} , value {:?}" , to , &value);
+
+        let payment = Payments {
+            customer_email: customer_mail.to_owned(),
+            transaction_hash: txhash.to_owned(),
+            asset: Asset::USDC,
+            amount: z,
+            chain: chain,
+            date: OffsetDateTime::now_utc(),
+        };
+        insert_payment(axum::Json(payment)).await?;
+    }
+
     let receipt = Receipt(transaction);
-    //println!("This is the receipt of the transaction {:?}" , response);
-    let response = provider.get_transaction_receipt(receipt).await?;
-    // let input = response.
-    println!("This is the receipt of the transaction {:?}", response);
-    Ok((StatusCode::OK, "User payment submitted").into_response())
-    // Should be corrected to handle the response tho
+    let receipt_response = provider.get_transaction_receipt(receipt).await?;
+    if receipt_response.status == "0x1"{
+        Ok((StatusCode::OK, "User payment submitted").into_response())
+    } else {
+        Ok((StatusCode::FORBIDDEN , "Payment request cannot be processed").into_response())
+    }
 }
 
-//async fn insert_payment(){}
-// fn submit_payment(){}
+async fn insert_payment(payment : Json<Payments>) -> Result<impl IntoResponse, ApiError<SubmitPaymentError>>{
+    let db_connection = RELATIONAL_DATABASE.get().unwrap();
+    sqlx::query!(
+        "INSERT INTO Payments(customerEmail, transactionHash, asset, amount, chain, date) 
+            VALUES ($1, $2, $3, $4, $5, $6)",
+        payment.customer_email,
+        payment.transaction_hash,
+        payment.asset as crate::database::types::Asset,
+        payment.amount,
+        payment.chain as crate::database::types::Chain,
+        payment.date,
+    )
+    .execute(db_connection)
+    .await?;
+    Ok(())
+} 
 
 #[derive(Debug)]
 struct PaymentValidation {
@@ -129,6 +168,7 @@ impl From<sqlx::Error> for ApiError<PaymentError> {
 //Error handling for submitPayment
 #[derive(Debug)]
 pub enum SubmitPaymentError {
+    TxhashError(EthCallError),
     TxDataError,
     AmountError,
     DatabaseError(sqlx::Error),
@@ -140,25 +180,35 @@ impl std::fmt::Display for SubmitPaymentError {
             SubmitPaymentError::TxDataError => write!(f, "Can't get data from Tx"),
             SubmitPaymentError::DatabaseError(e) => write!(f, "{}", e),
             SubmitPaymentError::AmountError => write!(f, "Can't parse value from Tx"),
+            SubmitPaymentError::TxhashError(e) => write!(f, "Transaction error: {}", e),
         }
     }
 }
+
 
 impl std::error::Error for SubmitPaymentError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            SubmitPaymentError::TxDataError => None,
+            SubmitPaymentError::TxDataError | SubmitPaymentError::AmountError => None,
             SubmitPaymentError::DatabaseError(e) => Some(e),
-            SubmitPaymentError::AmountError => None,
+            SubmitPaymentError::TxhashError(e) => Some(e),
         }
     }
 }
 
-impl From<sqlx::Error> for ApiError<SubmitPaymentError> {
-    fn from(value: sqlx::Error) -> Self {
-        ApiError::new(SubmitPaymentError::DatabaseError(value))
+
+impl From<EthCallError> for SubmitPaymentError {
+    fn from(error: EthCallError) -> Self {
+        SubmitPaymentError::TxhashError(error)
     }
 }
+impl From<sqlx::Error> for ApiError<SubmitPaymentError> {
+    fn from(error: sqlx::Error) -> Self {
+        ApiError::new(SubmitPaymentError::DatabaseError(error))
+    }
+}
+
+
 
 #[cfg(test)]
 mod tests {
@@ -167,17 +217,40 @@ mod tests {
         eth_rpc::types::Endpoints,
         routes::payment::process_payment,
     };
+    use jwt_simple::reexports::anyhow::Ok;
     use sqlx::types::time::OffsetDateTime;
     use std::error::Error;
+    use axum::response::IntoResponse;
     // Assuming axum::Json is required for submit_payment signature
-    use axum::Json;
+    #[tokio::test]
+    async fn get_tx_by_hash()  {
+        // Initialization or other preparatory steps
+        Endpoints::init();
+
+        let payment = Payments {
+            customer_email: "customer@example.com".to_string(),
+            transaction_hash: "0xc9abd0b9745ca40417bad813cc012114b81f043ee7215db168f28f21abf7bafe".to_string(),
+            asset: Asset::USDC,
+            amount: 1000,
+            chain: Chain::Optimism,
+            date: OffsetDateTime::now_utc(),
+        };
+
+        println!("Sending payment");
+        let transaction_hash = "0x83dfe9b147285ae709c29c363ad1e415bbcfc21b7c555106308cca0e3bcc67c4";
+
+        // Properly handle the Result returned by process_payment
+        // If process_payment returns Result<(), jwt_simple::Error>, you need to map this error to Box<dyn Error>
+        let result = process_payment(&payment.customer_email, transaction_hash).await;
+       
+    }
 
     #[tokio::test]
-    async fn get_tx_by_hash() -> Result<(), Box<dyn Error>> {
+    async fn usdc_tx() -> Result<(), jwt_simple::Error> {
         // Assuming Endpoints::init() exists and is necessary
         // Replace with actual initialization if required
 
-        Endpoints::init()?;
+        Endpoints::init();
         // I would treat this like the struc is the input of my function
         let payment = Payments {
             customer_email: "customer@example.com".to_string(),
@@ -190,8 +263,8 @@ mod tests {
         };
         println!("Sending payment"); // Ensure submit_payment accepts axum::Json<Payments>
         let arg1 = "0x8215cabb4634fac018ce551b20b381c62a6c808510e60eb0595f580fd8b8bf34";
-        process_payment(arg1).await?;
-
+        process_payment(&payment.customer_email , arg1).await;
         Ok(())
     }
+    
 }

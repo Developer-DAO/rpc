@@ -76,7 +76,7 @@ pub struct RawGetTransactionReceiptResponse {
     logs_bloom: String,
     #[serde(rename = "type")]
     tx_type: String,
-    status: String,
+    pub status: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
