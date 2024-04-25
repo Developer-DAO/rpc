@@ -113,11 +113,12 @@ async fn process_payment(customer_mail: &str , txhash: &str) -> Result<impl Into
 }
 
 async fn insert_payment(payment : Json<Payments>) -> Result<impl IntoResponse, ApiError<SubmitPaymentError>>{
+    println!("Testing insert payment");
     dotenv().unwrap();
     Database::init(None).await.unwrap();
     let db_connection = RELATIONAL_DATABASE.get().unwrap();
     sqlx::query!(
-        "INSERT INTO Payments(customerEmail, transactionHash, asset, amount, chain, date) 
+        "INSERT INTO Payments(customerEmail, transactionHash, asset  , amount, chain, date) 
             VALUES ($1, $2, $3, $4, $5, $6)",
         payment.customer_email,
         payment.transaction_hash,
@@ -128,6 +129,7 @@ async fn insert_payment(payment : Json<Payments>) -> Result<impl IntoResponse, A
     )
     .execute(db_connection)
     .await?;
+    println!("Finish insert");
     Ok(())
 } 
 
@@ -220,13 +222,15 @@ mod tests {
     use crate::{
         database::types::{Asset, Chain, Payments},
         eth_rpc::types::Endpoints,
-        routes::payment::process_payment,
+        routes::{errors::ApiError, payment::{process_payment, SubmitPaymentError}},
     };
+    use super::insert_payment;
+    use jwt_simple::reexports::anyhow::Ok;
     use sqlx::types::time::OffsetDateTime;
     use std::error::Error;
     use axum::response::IntoResponse;
     use serde::ser::StdError;
-    use std::result::Result::Ok;
+    //use std::result::Result::Ok;
     // Assuming axum::Json is required for submit_payment signature
  
 
@@ -235,7 +239,7 @@ mod tests {
         // Assuming Endpoints::init() exists and is necessary
         // Replace with actual initialization if required
 
-        Endpoints::init();
+        Endpoints::init().unwrap();
         // I would treat this like the struc is the input of my function
         let payment = Payments {
             customer_email: "customer@example.com".to_string(),
@@ -248,8 +252,26 @@ mod tests {
         };
         println!("Sending payment"); // Ensure submit_payment accepts axum::Json<Payments>
         let arg1 = "0x8215cabb4634fac018ce551b20b381c62a6c808510e60eb0595f580fd8b8bf34";
-        process_payment(&payment.customer_email , arg1).await;
+        process_payment(&payment.customer_email , arg1).await.unwrap();
         Ok(())
     }
+
+    #[tokio::test]
+    async fn payment_insert() ->Result<(), jwt_simple::Error>{
+        let payment = Payments {
+            customer_email: "customer@example.com".to_string(),
+            transaction_hash: "0xc9abd0b9745ca40417bad813cc012114b81f043ee7215db168f28f21abf7bafe"
+                .to_string(),
+            asset: Asset::USDC,
+            amount: 1000,
+            chain: Chain::Optimism,
+            date: OffsetDateTime::now_utc(),
+        };
+        println!("{:?}" , payment.asset);
+        insert_payment(axum::Json(payment)).await.unwrap();
+        Ok(())
+        
+    }
+
     
 }

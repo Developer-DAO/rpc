@@ -78,7 +78,7 @@ pub enum Chain {
 }
 
 #[derive(Debug, Clone , Copy , Deserialize, sqlx::Type)]
-#[sqlx(rename_all = "lowercase", type_name = "chain")]
+#[sqlx(rename_all = "lowercase", type_name = "asset")]
 pub enum Asset {
     Ether,
     USDC,
@@ -200,8 +200,8 @@ impl FromStr for Asset {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let plan = match s {
-            "ether" => Asset::Ether,
-            "usdc" => Asset::USDC,
+            "ETHER"|"ether" => Asset::Ether,
+            "USDC"|"usdc" => Asset::USDC,
             _ => Err(ParsingError(s.to_string(), "Asset"))?,
         };
 
