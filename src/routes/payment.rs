@@ -260,7 +260,7 @@ mod tests {
     async fn payment_insert() ->Result<(), jwt_simple::Error>{
         let payment = Payments {
             customer_email: "customer@example.com".to_string(),
-            transaction_hash: "0xc9abd0b9745ca40417bad813cc012114b81f043ee7215db168f28f21abf7bafe"
+            transaction_hash: "0x8215cabb4634fac018ce551b20b381c62a6c808510e60eb0595f580fd8b8bf34"
                 .to_string(),
             asset: Asset::USDC,
             amount: 1000,
@@ -273,5 +273,4 @@ mod tests {
         
     }
 
-    
 }
