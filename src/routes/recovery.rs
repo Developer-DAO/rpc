@@ -1,6 +1,10 @@
 use crate::database::types::RELATIONAL_DATABASE;
-use axum::{extract::Query, http::StatusCode, response::IntoResponse};
-use serde::{Deserialize, Serialize};
+use axum::{
+    extract::Path,
+    http::StatusCode,
+    response::IntoResponse,
+    Json,
+};
 use core::fmt;
 use lettre::{
     address::AddressError,
@@ -9,6 +13,7 @@ use lettre::{
     Message, SmtpTransport, Transport,
 };
 use rand::{rngs::ThreadRng, Rng};
+use serde::{Deserialize, Serialize};
 use std::{
     error::Error,
     fmt::{Display, Formatter},
@@ -32,21 +37,20 @@ pub struct ResetResponse {
 }
 
 pub async fn recover_password_email(
-    Query(payload): Query<ResetPasswordByEmail>,
+    Path(payload): Path<[String; 1]>,
 ) -> Result<impl IntoResponse, ApiError<RecoveryError>> {
     let db_connection = RELATIONAL_DATABASE.get().unwrap();
-    let account: ResetResponse = sqlx::query_as!(
-        ResetResponse,
-        "SELECT activated, verificationCode FROM Customers WHERE email = $1",
-        &payload.email
+    let email = payload
+        .first()
+        .ok_or_else(|| ApiError::new(RecoveryError::RouteArgumentsIncorrect))?;
+    let user_email = email.parse::<Mailbox>()?;
+    sqlx::query!(
+        "SELECT email FROM Customers WHERE email = $1",
+        &email
     )
     .fetch_optional(db_connection)
     .await?
     .ok_or_else(|| ApiError::new(RecoveryError::UserNotFound))?;
-
-    if !account.activated {
-        Err(ApiError::new(RecoveryError::AccountNotActivated))?
-    }
 
     let server_email_info: &'static Email = SERVER_EMAIL.get().unwrap();
     let email_credentials = Credentials::new(
@@ -56,13 +60,12 @@ pub async fn recover_password_email(
 
     let server_mailbox: Mailbox =
         format!("Developer DAO RPC <{}>", server_email_info.address).parse()?;
-    let user_email = payload.email.parse()?;
 
     let verification_code: u32 = ThreadRng::default().gen_range(10000000..99999999);
     sqlx::query!(
         "UPDATE Customers SET verificationCode = $1 WHERE email = $2",
         verification_code.to_string(),
-        &payload.email
+        &email
     )
     .execute(db_connection)
     .await?;
@@ -83,15 +86,13 @@ pub async fn recover_password_email(
     Ok((
         StatusCode::OK,
         "An email has been sent to the email provided.",
-    )
-        .into_response())
+    ))
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct UpdatePassword {
     code: String,
     email: String,
-    wallet: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -101,7 +102,7 @@ pub struct UpdatePasswordResponse {
 }
 
 pub async fn update_password(
-    Query(payload): Query<UpdatePassword>,
+    Json(payload): Json<UpdatePassword>,
 ) -> Result<impl IntoResponse, ApiError<RecoveryError>> {
     let db_connection = RELATIONAL_DATABASE.get().unwrap();
     let account: UpdatePasswordResponse = sqlx::query_as!(
@@ -113,10 +114,6 @@ pub async fn update_password(
     .await?
     .ok_or_else(|| ApiError::new(RecoveryError::UserNotFound))?;
 
-    if !account.activated {
-        Err(ApiError::new(RecoveryError::AccountNotActivated))?
-    }
-
     if payload.code != account.verificationcode {
         Err(ApiError::new(RecoveryError::IncorrectCode(
             payload.code.parse::<u32>()?,
@@ -124,14 +121,14 @@ pub async fn update_password(
     }
     let verification_code: u32 = ThreadRng::default().gen_range(10000000..99999999);
     sqlx::query!(
-        "UPDATE Customers SET verificationCode = $1 WHERE email = $2",
+        "UPDATE Customers SET verificationCode = $1, activated = true WHERE email = $2",
         verification_code.to_string(),
         &payload.email
     )
     .execute(db_connection)
     .await?;
 
-    Ok((StatusCode::OK, "Password changed successfully").into_response())
+    Ok((StatusCode::OK, "Password changed successfully"))
 }
 
 #[derive(Debug)]
@@ -144,11 +141,15 @@ pub enum RecoveryError {
     EmailAddressError(AddressError),
     IncorrectCode(u32),
     ParsingError(ParseIntError),
+    RouteArgumentsIncorrect,
 }
 
 impl Display for RecoveryError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
+            RecoveryError::RouteArgumentsIncorrect => {
+                write!(f, "Error: no path argument was provided to this route.")
+            }
             RecoveryError::DatabaseError(_) => {
                 write!(f, "An issue occurred while querying the database.")
             }
@@ -181,13 +182,14 @@ impl Display for RecoveryError {
 impl Error for RecoveryError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
+            RecoveryError::RouteArgumentsIncorrect => None,
             RecoveryError::DatabaseError(e) => Some(e),
             RecoveryError::UserNotFound => None,
             RecoveryError::AccountNotActivated => None,
             RecoveryError::EmailTransportError(e) => Some(e),
             RecoveryError::EmailError(e) => Some(e),
             RecoveryError::EmailAddressError(e) => Some(e),
-            RecoveryError::IncorrectCode(_) => None, 
+            RecoveryError::IncorrectCode(_) => None,
             RecoveryError::ParsingError(e) => Some(e),
         }
     }

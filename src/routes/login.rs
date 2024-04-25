@@ -10,7 +10,11 @@ use crate::{
     eth_rpc::types::Address,
 };
 use argon2::{Argon2, PasswordHash, PasswordVerifier};
-use axum::{http::StatusCode, response::IntoResponse, Json};
+use axum::{
+    http::{header::SET_COOKIE, HeaderMap, HeaderValue, StatusCode},
+    response::IntoResponse,
+    Json,
+};
 use jwt_simple::{algorithms::MACLike, reexports::coarsetime::Duration};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -52,10 +56,16 @@ pub async fn user_login(
         wallet: user.wallet.parse::<Address>()?,
     };
     let claims = jwt_simple::claims::Claims::with_custom_claims(user_info, Duration::from_hours(2));
-
     let key = JWT_KEY.get().unwrap();
-    let jwt = key.authenticate(claims)?;
-    Ok((StatusCode::OK, jwt).into_response())
+    let auth = key.authenticate(claims)?;
+
+    let mut headers = HeaderMap::new();
+    headers.insert(SET_COOKIE, HeaderValue::from_str(&format!("jwt={}", auth)).unwrap());
+    headers.append(SET_COOKIE, HeaderValue::from_str("Secure").unwrap());   
+    headers.append(SET_COOKIE, HeaderValue::from_str("HttpOnly").unwrap());
+    headers.append(SET_COOKIE, HeaderValue::from_str("SameSite=Strict").unwrap());
+
+    Ok((StatusCode::OK, headers, "login successful!"))
 }
 
 #[derive(Debug)]
@@ -66,6 +76,7 @@ pub enum LoginError {
     AccountNotActivated,
     JwtCreationError(jwt_simple::Error),
     AddressParsingError(ParsingError),
+    BuilderResponseError(axum::http::Error),
 }
 
 impl Display for LoginError {
@@ -85,6 +96,11 @@ impl Display for LoginError {
             LoginError::AddressParsingError(e) => {
                 write!(f, "There was an error parsing input as an Address: {}", e)
             }
+            LoginError::BuilderResponseError(e) => write!(
+                f,
+                "An error occured while building a response from the server {}",
+                e
+            ),
         }
     }
 }
@@ -98,7 +114,14 @@ impl Error for LoginError {
             LoginError::AccountNotActivated => None,
             LoginError::JwtCreationError(e) => e.source(),
             LoginError::AddressParsingError(e) => Some(e),
+            LoginError::BuilderResponseError(e) => Some(e),
         }
+    }
+}
+
+impl From<axum::http::Error> for ApiError<LoginError> {
+    fn from(value: axum::http::Error) -> Self {
+        ApiError::new(LoginError::BuilderResponseError(value))
     }
 }
 
@@ -128,28 +151,31 @@ impl From<ParsingError> for ApiError<LoginError> {
 
 #[cfg(test)]
 pub mod tests {
+
     use hex::ToHex;
     use jwt_simple::algorithms::{HS256Key, MACLike};
 
     #[test]
     fn get_key() -> Result<(), Box<dyn std::error::Error>> {
         let key: String = HS256Key::generate().key().encode_hex();
-        println!("{key:?}");
+        // println!("{key:?}");
         HS256Key::from_bytes(&hex::decode(key)?);
         Ok(())
     }
 
     use crate::{
         database::types::RELATIONAL_DATABASE,
+        middleware::jwt_auth::verify_jwt,
         register_user,
         routes::{
             activate::{activate_account, ActivationRequest},
+            api_keys::generate_api_keys,
             login::LoginRequest,
             types::RegisterUser,
         },
         user_login, Database, Email, JWTKey, TcpListener,
     };
-    use axum::{http::StatusCode, routing::post, Router};
+    use axum::{http::StatusCode, middleware::from_fn, routing::post, Router};
     use dotenvy::dotenv;
 
     #[tokio::test]
@@ -164,7 +190,11 @@ pub mod tests {
             let app = Router::new()
                 .route("/api/register", post(register_user))
                 .route("/api/activate", post(activate_account))
-                .route("/api/login", post(user_login));
+                .route("/api/login", post(user_login))
+                .route(
+                    "/api/keys",
+                    post(generate_api_keys).route_layer(from_fn(verify_jwt)),
+                );
             let listener = TcpListener::bind("0.0.0.0:3000").await.unwrap();
             axum::serve(listener, app).await.unwrap();
         });
@@ -207,15 +237,23 @@ pub mod tests {
             password: "test".to_string(),
         };
 
-        let login = reqwest::Client::new()
+        let ddrpc_client = reqwest::Client::builder()
+            .cookie_store(true)
+            .build()?;
+
+        ddrpc_client 
             .post("http://localhost:3000/api/login")
             .json(&lr)
             .send()
             .await?;
-        
-        assert_eq!(&login.status().to_string(), &StatusCode::OK.to_string());
-        
-        println!("\n{}\n", login.text().await?);
+
+        let keygen = ddrpc_client 
+            .post("http://localhost:3000/api/keys")
+            .send()
+            .await?;
+
+        assert_eq!(&keygen.status().to_string(), &StatusCode::OK.to_string());
+        println!("key: {}", keygen.text().await?);
 
         sqlx::query!("DELETE FROM Customers WHERE email = $1", &to)
             .execute(RELATIONAL_DATABASE.get().unwrap())

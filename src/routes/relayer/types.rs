@@ -11,6 +11,9 @@ pub static GATEWAY_URL: OnceLock<&'static str> = OnceLock::new();
 
 pub enum PoktChains {
     Arbitrum,
+    ArbitrumSepoliaArchival,
+    AmoyTestnetArchival,
+    OptimismSepoliaArchival,
     AVAX,
     AVAXArchival,
     BOBA,
@@ -72,12 +75,17 @@ pub enum PoktChains {
     Velas,
     VelasArchival,
     ZkSync,
+    PoktTestnetEthereumMock,
 }
 
 impl PoktChains {
     pub const fn id(&self) -> &'static str {
         match self {
+            Self::PoktTestnetEthereumMock => "0007",
             PoktChains::Arbitrum => "0066",
+            PoktChains::AmoyTestnetArchival => "A085",
+            PoktChains::OptimismSepoliaArchival => "A087",
+            PoktChains::ArbitrumSepoliaArchival => "A086",
             PoktChains::AVAX => "0003",
             PoktChains::AVAXArchival => "A003",
             PoktChains::BOBA => "0048",
@@ -149,7 +157,7 @@ impl PoktChains {
     }
 
     pub fn get_endpoint(&self) -> String {
-        format!("{}{}", GATEWAY_URL.get().unwrap(), Self::id(self))
+        format!("{}/relay/{}", GATEWAY_URL.get().unwrap(), Self::id(self))
     }
 
     pub async fn relay_pokt_transaction(
@@ -170,7 +178,11 @@ impl FromStr for PoktChains {
     type Err = RelayErrors;
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
+            "pokt_test" => Ok(PoktChains::PoktTestnetEthereumMock),
             "arbitrum" => Ok(PoktChains::Arbitrum),
+            "amoy_a" => Ok(PoktChains::AmoyTestnetArchival),
+            "arbitrum_sepolia_a" => Ok(PoktChains::ArbitrumSepoliaArchival),
+            "optimism_sepolia_a" => Ok(PoktChains::OptimismSepoliaArchival),
             "avax" => Ok(PoktChains::AVAX),
             "avax_a" => Ok(PoktChains::AVAXArchival),
             "boba" => Ok(PoktChains::BOBA),
@@ -217,7 +229,7 @@ impl FromStr for PoktChains {
             "pocket" => Ok(PoktChains::Pocket),
             "matic" => Ok(PoktChains::PolygonMatic),
             "matic_a" => Ok(PoktChains::PolygonMaticArchival),
-            "mumbai" => Ok(PoktChains::PolygonMumbai),
+            "mumbai_t" => Ok(PoktChains::PolygonMumbai),
             "polygon_zkevm" => Ok(PoktChains::PolygonZkEVM),
             "radix" => Ok(PoktChains::Radix),
             "scroll" => Ok(PoktChains::Scroll),
