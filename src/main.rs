@@ -50,7 +50,7 @@ async fn main() {
 
     let cors_api = CorsLayer::new()
         .allow_credentials(true)
-        .allow_origin("http://localhost:5173".parse::<HeaderValue>().unwrap())
+        .allow_origin("http://localhost:5174".parse::<HeaderValue>().unwrap())
         .allow_methods([Method::GET, Method::POST, Method::DELETE])
         .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION, header::COOKIE]);
 
@@ -82,10 +82,8 @@ async fn main() {
             "/api/pk_login",
             get(pk_login_challenge).post(pk_login_response),
         )
-        .route(
-            "/recovery",
-            get(recover_password_email).post(update_password),
-        )
+        .route("/api/recovery", post(update_password))
+        .route("/api/recovery/:email", get(recover_password_email))
         .merge(api_keys)
         .layer(cors_api)
         .merge(relayer);

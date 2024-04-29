@@ -19,6 +19,10 @@ use std::{
     fmt::{Display, Formatter},
     num::ParseIntError,
 };
+use argon2::{
+    password_hash::{rand_core::OsRng, SaltString},
+    Argon2, PasswordHasher,
+};
 
 use super::{
     errors::ApiError,
@@ -36,17 +40,16 @@ pub struct ResetResponse {
     pub verificationcode: String,
 }
 
+#[tracing::instrument]
 pub async fn recover_password_email(
-    Path(payload): Path<[String; 1]>,
+    Path(payload): Path<String>,
 ) -> Result<impl IntoResponse, ApiError<RecoveryError>> {
     let db_connection = RELATIONAL_DATABASE.get().unwrap();
-    let email = payload
-        .first()
-        .ok_or_else(|| ApiError::new(RecoveryError::RouteArgumentsIncorrect))?;
+    let email = payload;
     let user_email = email.parse::<Mailbox>()?;
     sqlx::query!(
         "SELECT email FROM Customers WHERE email = $1",
-        &email
+        email
     )
     .fetch_optional(db_connection)
     .await?
@@ -93,21 +96,22 @@ pub async fn recover_password_email(
 pub struct UpdatePassword {
     code: String,
     email: String,
+    password: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct UpdatePasswordResponse {
-    activated: bool,
     verificationcode: String,
 }
 
+#[tracing::instrument]
 pub async fn update_password(
     Json(payload): Json<UpdatePassword>,
 ) -> Result<impl IntoResponse, ApiError<RecoveryError>> {
     let db_connection = RELATIONAL_DATABASE.get().unwrap();
     let account: UpdatePasswordResponse = sqlx::query_as!(
         UpdatePasswordResponse,
-        "SELECT activated, verificationCode FROM Customers WHERE email = $1",
+        "SELECT verificationCode FROM Customers WHERE email = $1",
         &payload.email
     )
     .fetch_optional(db_connection)
@@ -119,11 +123,21 @@ pub async fn update_password(
             payload.code.parse::<u32>()?,
         )))?
     }
+    
+    //update password with new hash 
+    let hashed_pass: String = {
+        let salt = SaltString::generate(&mut OsRng);
+        Argon2::default()
+            .hash_password(payload.password.as_bytes(), &salt)?
+            .to_string()
+    };
+
     let verification_code: u32 = ThreadRng::default().gen_range(10000000..99999999);
     sqlx::query!(
-        "UPDATE Customers SET verificationCode = $1, activated = true WHERE email = $2",
+        "UPDATE Customers SET verificationCode = $1, password = $3, activated = true WHERE email = $2",
         verification_code.to_string(),
-        &payload.email
+        &payload.email,
+        hashed_pass,
     )
     .execute(db_connection)
     .await?;
@@ -142,6 +156,7 @@ pub enum RecoveryError {
     IncorrectCode(u32),
     ParsingError(ParseIntError),
     RouteArgumentsIncorrect,
+    PasswordHashingError(argon2::password_hash::Error),
 }
 
 impl Display for RecoveryError {
@@ -175,6 +190,7 @@ impl Display for RecoveryError {
                 write!(f, "The submitted code was incorrect: {}", num)
             }
             RecoveryError::ParsingError(_) => write!(f, "Failed to parse string into an u32"),
+            RecoveryError::PasswordHashingError(e) => write!(f, "Failed to hash password: {}", e)
         }
     }
 }
@@ -191,6 +207,7 @@ impl Error for RecoveryError {
             RecoveryError::EmailAddressError(e) => Some(e),
             RecoveryError::IncorrectCode(_) => None,
             RecoveryError::ParsingError(e) => Some(e),
+            RecoveryError::PasswordHashingError(_) => None,
         }
     }
 }
@@ -222,5 +239,11 @@ impl From<AddressError> for ApiError<RecoveryError> {
 impl From<ParseIntError> for ApiError<RecoveryError> {
     fn from(value: ParseIntError) -> Self {
         ApiError::new(RecoveryError::ParsingError(value))
+    }
+}
+
+impl From<argon2::password_hash::Error> for ApiError<RecoveryError> {
+    fn from(value: argon2::password_hash::Error) -> Self {
+        ApiError::new(RecoveryError::PasswordHashingError(value))
     }
 }
