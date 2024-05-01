@@ -10,11 +10,9 @@ use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
 use crypto_bigint::Uint;
 use crypto_bigint::{Encoding, Limb};
 use dotenvy::dotenv;
-use ethers::signers::yubihsm::Uuid;
 use hex;
 use hex::decode;
 use jwt_simple::reexports::anyhow::Chain;
-use num::traits::SaturatingMul;
 use num::{BigInt, Num};
 use serde::Serialize;
 use serde_json::from_str;
@@ -30,7 +28,7 @@ pub fn convert_hex_to_dec(hex_str: &str) -> String {
 }
 
 use core::str;
-use ethers::core::utils::hex::FromHex;
+//use ethers::core::utils::hex::FromHex;
 
 
 const TOKENS_SUPPORTED: [&str; 8] = [
