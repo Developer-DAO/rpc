@@ -93,7 +93,7 @@ pub struct RawGetTransactionByHashResponse {
     max_fee_per_gas: Option<String>,
     max_priority_fee_per_gas: Option<String>,
     nonce: String,
-    to: String,
+    pub to: String,
     transaction_index: String,
     #[serde(rename = "type")]
     tx_type: String,

@@ -32,6 +32,18 @@ pub fn convert_hex_to_dec(hex_str: &str) -> String {
 use core::str;
 use ethers::core::utils::hex::FromHex;
 
+
+const TOKENS_SUPPORTED: [&str; 8] = [
+    "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
+    "0x7F5c764cBc14f9669B88837ca1490cCa17c31607",
+    "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+    "0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8",
+    "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",
+    "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
+    "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
+    "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+];
+
 #[tracing::instrument]
 pub async fn verify_subscription(
     Path(email_address): Path<String>,
@@ -61,8 +73,18 @@ async fn process_payment(customer_mail: &str , txhash: &str) -> Result<impl Into
     let transaction = GetTransactionByHash::new(txhash.to_owned()); // Assuming it addes it automatically
     let provider = ETHEREUM_ENDPOINT.get().unwrap();
     let tx = provider.get_transaction_by_hash(&transaction).await?;
+    let to = tx.to.as_str();
+    println!("{:?}" ,TOKENS_SUPPORTED);
 
-
+    //Can we compare bytes?
+    //Lowercase for compatibility
+    if TOKENS_SUPPORTED.iter().any(|e| to.to_lowercase().contains(&e.to_lowercase())) {
+        println!("This stuff worked");
+    } else {
+        println!("This don't");
+        //return Err(Box::new(ApiError::new(PaymentError::UnsupportedToken)));
+    }
+    //Necesito los checkeos antes de parsearlos por que si no para que tomarme el tiempo
     println!("This is the transaction hash {:?}" , tx );
     if tx.input == "0x"{
         //Let value , tx , amount 

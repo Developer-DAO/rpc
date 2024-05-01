@@ -8,6 +8,9 @@ use std::sync::OnceLock;
 pub static JWT_KEY: OnceLock<HS256Key> = OnceLock::new();
 pub static SERVER_EMAIL: OnceLock<Email> = OnceLock::new();
 
+
+
+
 pub struct JWTKey;
 
 impl JWTKey {
@@ -72,3 +75,4 @@ impl Normalize for RegisterUser {
 //pub struct UserPayment{
   //  pub 
 //}
+
