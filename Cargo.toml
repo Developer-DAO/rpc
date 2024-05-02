@@ -21,6 +21,7 @@ serde = {version = "1.0.195", features = ["derive"]}
 serde_json = "1.0.111"
 sha3 = "0.10.8"
 sqlx = {version = "0.7.3", features = ["postgres", "macros", "runtime-tokio", "tls-rustls", "time"]}
+time = {version = "0.3.36" , features = ["serde"]}
 tokio = {version = "1.35.1", features = ["rt-multi-thread", "macros"]}
 tokio-test = "0.4.3"
 tower-http = {version = "0.5.1", features = ["cors"]}

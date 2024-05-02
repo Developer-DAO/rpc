@@ -88,7 +88,7 @@ pub struct RawGetTransactionByHashResponse {
     from: String,
     gas: String,
     gas_price: String,
-    hash: String,
+    pub hash: String,
     pub input: String,
     max_fee_per_gas: Option<String>,
     max_priority_fee_per_gas: Option<String>,

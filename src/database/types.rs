@@ -1,8 +1,9 @@
 use serde::{Deserialize, Serialize};
-use sqlx::{migrate, types::time::OffsetDateTime, FromRow, PgPool, Pool, Postgres};
+use sqlx::{migrate, FromRow, PgPool, Pool, Postgres};
 use std::fmt::Display;
 use std::str::FromStr;
 use std::sync::OnceLock;
+use time::OffsetDateTime;
 
 use super::errors::{ChainidError, ParsingError};
 
@@ -44,7 +45,7 @@ pub struct PaymentInfo {
     pub subscription: Plan,
 }
 
-#[derive(FromRow, Debug)]
+#[derive(FromRow, Debug, Serialize, Deserialize)]
 pub struct Payments {
     pub customer_email: String,
     pub transaction_hash: String,
@@ -68,7 +69,7 @@ pub enum Plan {
     Gigachad,
 }
 
-#[derive(Debug, Clone, Copy , Deserialize, sqlx::Type)]
+#[derive(Debug, Clone, Copy , Serialize ,  Deserialize, sqlx::Type)]
 #[sqlx(rename_all = "lowercase", type_name = "chain")]
 pub enum Chain {
     Optimism,
@@ -77,7 +78,7 @@ pub enum Chain {
     Base,
 }
 
-#[derive(Debug, Clone , Copy , Deserialize, sqlx::Type)]
+#[derive(Debug, Clone , Copy ,Serialize ,  Deserialize, sqlx::Type)]
 #[sqlx(rename_all = "lowercase", type_name = "asset")]
 pub enum Asset {
     Ether,

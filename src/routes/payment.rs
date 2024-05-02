@@ -1,11 +1,12 @@
 use super::errors::ApiError;
-use crate::database::types::{Asset, Chain as Chainlist, Database, FromHexStr};
+use crate::database::types::{Api, Asset, Chain as Chainlist, Database, FromHexStr};
 use crate::eth_rpc::errors::EthCallError;
-use crate::eth_rpc::types::{Chains, Endpoints, GetTransactionByHash, Receipt, Transfer, ETHEREUM_ENDPOINT};
+use crate::eth_rpc::types::{Chains, Endpoints, GetTransactionByHash, RawGetTransactionByHashResponse, Receipt, Transfer, ETHEREUM_ENDPOINT};
 use crate::{
     database::types::{Payments, RELATIONAL_DATABASE},
     eth_rpc::types::Provider,
 };
+use axum::http::Response;
 use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
 use crypto_bigint::Uint;
 use crypto_bigint::{Encoding, Limb};
@@ -16,10 +17,12 @@ use jwt_simple::reexports::anyhow::Chain;
 use num::{BigInt, Num};
 use serde::Serialize;
 use serde_json::from_str;
+use sha3::digest::typenum::Sum;
 use sqlx::types::time::OffsetDateTime;
 use std::borrow::{Borrow, BorrowMut};
 use std::error::Error;
-use std::io;
+use std::fmt::write;
+use std::{env, io};
 use std::ops::Sub;
 use std::str::FromStr;
 
@@ -41,6 +44,8 @@ const TOKENS_SUPPORTED: [&str; 8] = [
     "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
     "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
 ];
+
+
 
 #[tracing::instrument]
 pub async fn verify_subscription(
@@ -64,75 +69,83 @@ pub async fn verify_subscription(
     Ok((StatusCode::OK, "User payment is valid").into_response())
 }
 //Previous arg payload): Json<Payments>)
-async fn process_payment(customer_mail: &str , txhash: &str) -> Result<impl IntoResponse, Box<dyn Error>> {
-    // Take in mind the struct that will be in the db
+async fn process_payment(customer_mail: &str, txhash: &str) -> Result<Response<axum::body::Body>, Box<dyn Error>> {
+    dotenv().ok();
+    let addy = env::var("PAYMENT_ADDY").unwrap();
 
-    //Note: Do we need to check the input of the chain to match with the chain id?
-    let transaction = GetTransactionByHash::new(txhash.to_owned()); // Assuming it addes it automatically
+    let transaction = GetTransactionByHash::new(txhash.to_owned());
     let provider = ETHEREUM_ENDPOINT.get().unwrap();
     let tx = provider.get_transaction_by_hash(&transaction).await?;
+    let response = match tx.input.as_str() {
+        "0x" => process_ether_transfer(&addy, &tx, customer_mail).await,
+        _ => process_token_transfer(&addy, &tx, customer_mail).await,
+    };
+
+    // Convert all responses to a common type
+    response.map(|inner_response| inner_response.into_response())
+}
+
+async fn process_ether_transfer(addy: &str, tx: &RawGetTransactionByHashResponse, customer_mail: &str) -> Result<Json<Payments>, Box<dyn Error>> {
     let to = tx.to.as_str();
-    println!("{:?}" ,TOKENS_SUPPORTED);
-
-    //Can we compare bytes?
-    //Lowercase for compatibility
-    if TOKENS_SUPPORTED.iter().any(|e| to.to_lowercase().contains(&e.to_lowercase())) {
-        println!("This stuff worked");
-    } else {
-        println!("This don't");
-        //return Err(Box::new(ApiError::new(PaymentError::UnsupportedToken)));
-    }
-    //Necesito los checkeos antes de parsearlos por que si no para que tomarme el tiempo
-    println!("This is the transaction hash {:?}" , tx );
-    if tx.input == "0x"{
-        //Let value , tx , amount 
-        let tx_value = convert_hex_to_dec(&tx.value.trim_start_matches("0x"));
-        let tx_asset = Asset::Ether;
-        println!("Tx value {:?}", tx_value); // wei value 10.^18
-        // We should get the two from the receipt 
-        let chain = Chainlist::from_hex(&tx.chain_id)?;
+    println!("{:?}" , to);
+    if addy.to_lowercase() == to.to_lowercase() {
+        let tx_value = tx.value.trim_start_matches("0x");
+        let z = i64::from_str_radix(tx_value.into(), 16)?;
         let payment = Payments {
             customer_email: customer_mail.to_owned(),
-            transaction_hash: txhash.to_owned(),
-            asset: tx_asset,
-            amount: from_str(&tx.value)?,
-            chain: chain,
-            date: OffsetDateTime::now_utc(),
-        };
-        insert_payment(axum::Json(payment)).await?;
-    
-    } else {
-         // Check later if this checks the method id 0xa9059cbb
-        println!("Entering the else statement");
-        let res = Transfer::from_str(&tx.input)?;
-        let to = res.to;
-        let value = res.amount.to_string();
-        let z = i64::from_str_radix(&value, 16)?;
-        let chain = Chainlist::from_hex(&tx.chain_id)?;
-        println!("To {:?} , value {:?}" , to , &value);
-
-        let payment = Payments {
-            customer_email: customer_mail.to_owned(),
-            transaction_hash: txhash.to_owned(),
-            asset: Asset::USDC,
+            transaction_hash: tx.hash.to_owned(),
+            asset: Asset::Ether,
             amount: z,
-            chain: chain,
+            chain: Chainlist::from_hex(&tx.chain_id)?,
             date: OffsetDateTime::now_utc(),
         };
-        println!("Inserting payment");
-        insert_payment(axum::Json(payment)).await?;
-    }
-
-    let receipt = Receipt(transaction);
-    let receipt_response = provider.get_transaction_receipt(receipt).await?;
-    if receipt_response.status == "0x1"{
-        Ok((StatusCode::OK, "User payment submitted").into_response())
+        println!("{:?}" , payment.amount);
+        is_txfinalized(&payment.transaction_hash).await?;
+        insert_payment(Json(&payment)).await?;
+        Ok(Json(payment))
     } else {
-        Ok((StatusCode::FORBIDDEN , "Payment request cannot be processed").into_response())
+        Err(Box::new(ApiError::new(SubmitPaymentError::AddressMismatch)))
     }
 }
 
-async fn insert_payment(payment : Json<Payments>) -> Result<impl IntoResponse, ApiError<SubmitPaymentError>>{
+async fn process_token_transfer(addy: &str, tx: &RawGetTransactionByHashResponse, customer_mail: &str) -> Result<Json<Payments>, Box<dyn Error>> {
+    if TOKENS_SUPPORTED.iter().any(|e| tx.to.as_str().to_lowercase().contains(&e.to_lowercase())) {
+        let res = Transfer::from_str(&tx.input)?;
+        if addy.to_lowercase() == res.to.to_string().to_lowercase() {
+            let z = i64::from_str_radix(&res.amount.to_string(), 16)?;
+            let payment = Payments {
+                customer_email: customer_mail.to_owned(),
+                transaction_hash: tx.hash.to_owned(),
+                asset: Asset::USDC,
+                amount: z,
+                chain: Chainlist::from_hex(&tx.chain_id)?,
+                date: OffsetDateTime::now_utc(),
+            };
+            is_txfinalized(&payment.transaction_hash).await?;
+            insert_payment(Json(&payment)).await?;
+            Ok(Json(payment))
+        } else {
+            Err(Box::new(ApiError::new(SubmitPaymentError::AddressMismatch)))
+        }
+    } else {
+        Err(Box::new(ApiError::new(SubmitPaymentError::UnsupportedToken)))
+    }
+}
+
+async fn is_txfinalized(tx : &str) -> Result<bool , Box< dyn Error>>{
+    dotenv().ok();
+    let transaction = GetTransactionByHash::new(tx.to_owned());
+    let provider = ETHEREUM_ENDPOINT.get().unwrap();
+    let receipt = Receipt(transaction);
+    let tx = provider.get_transaction_receipt(receipt).await?;
+    if tx.status == "0x1"{
+        Ok(true)
+    } else {
+        Err(Box::new(ApiError::new(SubmitPaymentError::TxNotFinalized)))
+    }
+}
+
+async fn insert_payment(payment : Json<&Payments>) -> Result<impl IntoResponse, ApiError<SubmitPaymentError>>{
     println!("Testing insert payment");
     dotenv().unwrap();
     Database::init(None).await.unwrap();
@@ -197,7 +210,9 @@ impl From<sqlx::Error> for ApiError<PaymentError> {
 pub enum SubmitPaymentError {
     TxhashError(EthCallError),
     TxDataError,
-    AmountError,
+    AddressMismatch,
+    UnsupportedToken,
+    TxNotFinalized,
     DatabaseError(sqlx::Error),
 }
 
@@ -206,8 +221,10 @@ impl std::fmt::Display for SubmitPaymentError {
         match self {
             SubmitPaymentError::TxDataError => write!(f, "Can't get data from Tx"),
             SubmitPaymentError::DatabaseError(e) => write!(f, "{}", e),
-            SubmitPaymentError::AmountError => write!(f, "Can't parse value from Tx"),
+            SubmitPaymentError::AddressMismatch => write!(f, "Tx destinatary is not valid"),
             SubmitPaymentError::TxhashError(e) => write!(f, "Transaction error: {}", e),
+            SubmitPaymentError::UnsupportedToken =>write!(f, "Token not supported") , 
+            SubmitPaymentError::TxNotFinalized => write!(f , "Tx not finalized")
         }
     }
 }
@@ -216,9 +233,11 @@ impl std::fmt::Display for SubmitPaymentError {
 impl std::error::Error for SubmitPaymentError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            SubmitPaymentError::TxDataError | SubmitPaymentError::AmountError => None,
+            SubmitPaymentError::TxDataError | SubmitPaymentError::AddressMismatch => None,
             SubmitPaymentError::DatabaseError(e) => Some(e),
             SubmitPaymentError::TxhashError(e) => Some(e),
+            SubmitPaymentError::UnsupportedToken => None,
+            SubmitPaymentError::TxNotFinalized => None
         }
     }
 }
@@ -239,41 +258,46 @@ impl From<sqlx::Error> for ApiError<SubmitPaymentError> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        database::types::{Asset, Chain, Payments},
-        eth_rpc::types::Endpoints,
-        routes::{errors::ApiError, payment::{process_payment, SubmitPaymentError}},
-    };
-    use super::insert_payment;
-    use jwt_simple::reexports::anyhow::Ok;
+    use super::*;
+    use crate::database::types::{Asset, Chain, Payments};
+    use crate::eth_rpc::types::Endpoints;
+    use crate::routes::errors::ApiError;
+    use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
     use sqlx::types::time::OffsetDateTime;
     use std::error::Error;
-    use axum::response::IntoResponse;
-    use serde::ser::StdError;
-    //use std::result::Result::Ok;
-    // Assuming axum::Json is required for submit_payment signature
- 
+    use tokio::test;
+
+    use std::error::Error as StdError;
 
     #[tokio::test]
-    async fn usdc_tx() -> Result<(), jwt_simple::Error> {
-        // Assuming Endpoints::init() exists and is necessary
-        // Replace with actual initialization if required
+    async fn usdc_tx() -> Result<(), Box<dyn StdError>> {
+        // Initialize endpoints and handle potential errors explicitly
+        Endpoints::init()?;
 
-        Endpoints::init().unwrap();
-        // I would treat this like the struc is the input of my function
-        let payment = Payments {
-            customer_email: "customer@example.com".to_string(),
-            transaction_hash: "0xc9abd0b9745ca40417bad813cc012114b81f043ee7215db168f28f21abf7bafe"
-                .to_string(),
-            asset: Asset::USDC,
-            amount: 1000,
-            chain: Chain::Optimism,
-            date: OffsetDateTime::now_utc(),
-        };
-        println!("Sending payment"); // Ensure submit_payment accepts axum::Json<Payments>
+        println!("Sending payment");
         let arg1 = "0x8215cabb4634fac018ce551b20b381c62a6c808510e60eb0595f580fd8b8bf34";
-        process_payment(&payment.customer_email , arg1).await.unwrap();
-        Ok(())
+
+        // Process the payment and handle results explicitly
+        let response = process_payment("customer2@example.com", arg1).await;
+        match response {
+            Ok(_) => Ok(()),
+            Err(e) => Err(e),  // Assuming e is already Box<dyn StdError>
+        }
+    }
+    #[tokio::test]
+    async fn eth_tx() -> Result<(), Box<dyn StdError>> {
+        // Initialize endpoints and handle potential errors explicitly
+        Endpoints::init()?;
+    
+        println!("Sending payment");
+        let arg1 = "0x8fca1317d09136312b6edc742dd868e6d9e16982a8544d60d8d2ee79b304db0e";
+
+        // Process the payment and handle results explicitly
+        let response = process_payment("customer@example.com", arg1).await;
+        match response {
+            Ok(_) => Ok(()),
+            Err(e) => Err(e),  // Assuming e is already Box<dyn StdError>
+        }
     }
 
     #[tokio::test]
@@ -288,7 +312,7 @@ mod tests {
             date: OffsetDateTime::now_utc(),
         };
         println!("{:?}" , payment.asset);
-        insert_payment(axum::Json(payment)).await.unwrap();
+        insert_payment(axum::Json(&payment)).await.unwrap();
         Ok(())
         
     }
