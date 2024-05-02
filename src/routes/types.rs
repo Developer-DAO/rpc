@@ -56,7 +56,7 @@ pub struct RegisterUser {
 
 impl IntoResponse for RegisterUser {
     fn into_response(self) -> axum::response::Response {
-        (StatusCode::INTERNAL_SERVER_ERROR, self).into_response()
+        (StatusCode::OK, self).into_response()
     }
 }
 

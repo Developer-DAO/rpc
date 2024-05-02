@@ -1,5 +1,5 @@
 use super::{errors::ApiError, types::Claims};
-use crate::database::types::{Api, RELATIONAL_DATABASE};
+use crate::database::types::RELATIONAL_DATABASE;
 use axum::{
     extract::{Extension, Path},
     http::StatusCode,
@@ -14,9 +14,29 @@ use std::{
     fmt::{Display, Formatter},
 };
 
+#[derive(Debug, Default)]
+pub struct KeygenLimit {
+    count: Option<i64>,
+}
+
+#[tracing::instrument]
 pub async fn generate_api_keys(
     Extension(jwt): Extension<JWTClaims<Claims>>,
 ) -> Result<impl IntoResponse, ApiError<ApiKeyError>> {
+    let keys = sqlx::query_as!(
+        KeygenLimit,
+        "SELECT COUNT(*) FROM Api where customerEmail = $1",
+        jwt.custom.email
+    )
+    .fetch_one(RELATIONAL_DATABASE.get().unwrap())
+    .await?
+    .count
+    .unwrap_or_default();
+
+    if keys >= 10i64 {
+        Err(ApiError::new(ApiKeyError::RateLimit))?
+    }
+
     let (secret_key, _) = generate_keypair(&mut rand::thread_rng());
     let key_string = hex::encode(secret_key.secret_bytes());
     sqlx::query!(
@@ -26,22 +46,28 @@ pub async fn generate_api_keys(
     )
     .execute(RELATIONAL_DATABASE.get().unwrap())
     .await?;
-
-    Ok((StatusCode::OK, key_string).into_response())
+    println!("{key_string}");
+    Ok((StatusCode::OK, key_string))
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Keys {
+    apikey: String,
+}
+
+#[tracing::instrument]
 pub async fn get_all_api_keys(
     Extension(jwt): Extension<JWTClaims<Claims>>,
 ) -> Result<impl IntoResponse, ApiError<ApiKeyError>> {
-    let keys: Vec<Api> = sqlx::query_as!(
-        Api,
-        "SELECT * FROM Api where customerEmail = $1",
+    let keys: Vec<Keys> = sqlx::query_as!(
+        Keys,
+        "SELECT apiKey FROM Api where customerEmail = $1",
         jwt.custom.email
     )
     .fetch_all(RELATIONAL_DATABASE.get().unwrap())
     .await?;
 
-    Ok((StatusCode::OK, serde_json::to_string(&keys)?).into_response())
+    Ok((StatusCode::OK, serde_json::to_string(&keys)?))
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -49,6 +75,7 @@ pub struct DeleteKey {
     key: String,
 }
 
+#[tracing::instrument]
 pub async fn delete_key(
     Path(params): Path<String>,
 ) -> Result<impl IntoResponse, ApiError<ApiKeyError>> {
@@ -56,7 +83,7 @@ pub async fn delete_key(
         .execute(RELATIONAL_DATABASE.get().unwrap())
         .await?;
 
-    Ok((StatusCode::OK, "Key successfully deleted").into_response())
+    Ok((StatusCode::OK, "Key successfully deleted"))
 }
 
 #[derive(Debug)]
@@ -64,6 +91,7 @@ pub enum ApiKeyError {
     DatabaseError(sqlx::Error),
     JsonError(serde_json::Error),
     KeyNotFound,
+    RateLimit,
 }
 
 impl Display for ApiKeyError {
@@ -74,6 +102,9 @@ impl Display for ApiKeyError {
             }
             ApiKeyError::JsonError(_) => write!(f, "Failed to serialize value into JSON"),
             ApiKeyError::KeyNotFound => write!(f, "Failed to find key in database"),
+            ApiKeyError::RateLimit => {
+                write!(f, "You have reached your maximum allocation of API keys.")
+            }
         }
     }
 }
@@ -84,6 +115,7 @@ impl Error for ApiKeyError {
             ApiKeyError::DatabaseError(e) => Some(e),
             ApiKeyError::JsonError(e) => Some(e),
             ApiKeyError::KeyNotFound => None,
+            ApiKeyError::RateLimit => None,
         }
     }
 }
@@ -100,8 +132,6 @@ impl From<serde_json::Error> for ApiError<ApiKeyError> {
     }
 }
 
-
-// limits for API key generation to avoid abuse 
-// 
+// limits for API key generation to avoid abuse
+//
 // maybe scope api key permissions in the future
-

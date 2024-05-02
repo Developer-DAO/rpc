@@ -68,7 +68,7 @@ pub async fn validate_subscription_and_update_user_calls(
         PaymentInfo.customerEmail
         FROM PaymentInfo
         WHERE PaymentInfo.customerEmail = (SELECT customerEmail FROM Api WHERE apiKey = $1)"#,
-        key.get(0)
+        key.get(1)
             .ok_or_else(|| ApiError::new(RpcAuthErrors::InvalidApiKey))?
     )
     .fetch_optional(db_connection)
@@ -85,20 +85,22 @@ pub async fn validate_subscription_and_update_user_calls(
         Err(ApiError::new(RpcAuthErrors::PlanLimitReached))?
     }
 
-    let increment = sqlx::query!(
-        "UPDATE PaymentInfo set callCount = $1 WHERE customerEmail = $2",
-        sub_info.callcount + 1,
-        sub_info.customeremail,
-    )
-    .execute(db_connection);
+    let inc = tokio::spawn(async move {
+        sqlx::query!(
+            "UPDATE PaymentInfo set callCount = $1 WHERE customerEmail = $2",
+            sub_info.callcount + 1,
+            sub_info.customeremail,
+        )
+        .execute(db_connection)
+        .await
+    });
+    let ret = tokio::spawn(async { next.run(request).await });
 
-    let ret = next.run(request);
+    let (res, inc) = join!(ret, inc);
 
-    let (res, inc) = join!(ret, increment);
+    inc.unwrap()?;
 
-    inc?;
-
-    Ok(res)
+    Ok(res.unwrap())
 }
 
 #[derive(Debug)]

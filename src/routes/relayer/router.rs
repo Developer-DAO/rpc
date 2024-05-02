@@ -14,11 +14,11 @@ pub async fn route_call(
     Json(body): Json<JsonRpcRequest>,
 ) -> Result<impl IntoResponse, ApiError<RouterErrors>> {
     let raw_destination = route_info
-        .get(1)
+        .first()
         .ok_or_else(|| ApiError::new(RouterErrors::DestinationError))?;
     let dest = raw_destination.parse::<PoktChains>()?;
     let result = dest.relay_pokt_transaction(&body).await?;
-    Ok((StatusCode::OK, result).into_response())
+    Ok((StatusCode::OK, result))
 }
 
 #[derive(Debug)]

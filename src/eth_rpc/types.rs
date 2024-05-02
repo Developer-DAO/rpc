@@ -40,6 +40,7 @@ where
     T: EthCall,
 {
     GetTxByHash(T),
+    GetTxReceipt(T),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -217,7 +218,7 @@ impl Provider {
 pub mod tests {
     use crate::eth_rpc::types::{Address, Transfer};
     use crypto_bigint::U256;
-    use std::str::FromStr;
+    use std::{ops::Div, str::FromStr};
 
     #[test]
     fn parse_transfer_calldata() -> Result<(), Box<dyn std::error::Error>> {
@@ -228,6 +229,13 @@ pub mod tests {
         let res = Transfer::from_str(calldata)?;
         assert_eq!(res.to, expected_address);
         assert_eq!(res.amount, expected_amount);
+        // the Optimism transaction you sent me 
+        let cd2 = "0xa9059cbb0000000000000000000000000c89c41071b00289ac49cefbeaeaa48d233437ef00000000000000000000000000000000000000000000000000000002717f08b4";
+        let res2 = Transfer::from_str(cd2)?;
+        let amt: u64 = res2.amount.resize().into();
+        let decimal: f64 = amt as f64; 
+        println!("{:?}", decimal.div(10f64.powf(6f64)));
+
         Ok(())
     }
 }
