@@ -1,29 +1,17 @@
 use super::errors::ApiError;
-use crate::database::types::{Api, Asset, Chain as Chainlist, Database, FromHexStr};
+use crate::database::types::{ Asset, Chain as Chainlist, Database, FromHexStr};
 use crate::eth_rpc::errors::EthCallError;
-use crate::eth_rpc::types::{Chains, Endpoints, GetTransactionByHash, RawGetTransactionByHashResponse, Receipt, Transfer, ETHEREUM_ENDPOINT};
-use crate::{
-    database::types::{Payments, RELATIONAL_DATABASE},
-    eth_rpc::types::Provider,
-};
+use crate::eth_rpc::types::{ GetTransactionByHash, RawGetTransactionByHashResponse, Receipt, Transfer, ETHEREUM_ENDPOINT};
+use crate::
+    database::types::{Payments, RELATIONAL_DATABASE}
+;
 use axum::http::Response;
 use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
-use crypto_bigint::Uint;
-use crypto_bigint::{Encoding, Limb};
 use dotenvy::dotenv;
-use hex;
-use hex::decode;
-use jwt_simple::reexports::anyhow::Chain;
 use num::{BigInt, Num};
-use serde::Serialize;
-use serde_json::from_str;
-use sha3::digest::typenum::Sum;
 use sqlx::types::time::OffsetDateTime;
-use std::borrow::{Borrow, BorrowMut};
 use std::error::Error;
-use std::fmt::write;
-use std::{env, io};
-use std::ops::Sub;
+use std::env;
 use std::str::FromStr;
 
 pub fn convert_hex_to_dec(hex_str: &str) -> String {
@@ -261,11 +249,8 @@ mod tests {
     use super::*;
     use crate::database::types::{Asset, Chain, Payments};
     use crate::eth_rpc::types::Endpoints;
-    use crate::routes::errors::ApiError;
-    use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
     use sqlx::types::time::OffsetDateTime;
-    use std::error::Error;
-    use tokio::test;
+    
 
     use std::error::Error as StdError;
 
