@@ -25,11 +25,13 @@ CREATE TABLE IF NOT EXISTS Api (
     PRIMARY KEY(customerEmail, apiKey)
 );
 
-CREATE TABLE IF NOT EXISTS Payments (    
-    customerEmail VARCHAR(255) PRIMARY KEY,
-    transactionHash VARCHAR(120) NOT NULL UNIQUE,
+CREATE TABLE IF NOT EXISTS Payments (
+    customerEmail VARCHAR(255) NOT NULL, 
+    transactionHash VARCHAR(120) PRIMARY KEY,  -- Unique for each payment
     asset ASSET NOT NULL, 
     amount BIGINT NOT NULL,
     chain CHAIN NOT NULL,
     date TIMESTAMPTZ NOT NULL
 );
+
+CREATE INDEX IF NOT EXISTS idx_customer_email ON Payments (customerEmail);

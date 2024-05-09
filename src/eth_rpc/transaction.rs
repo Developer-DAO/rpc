@@ -61,7 +61,7 @@ pub mod tests {
         let hash = "0x10d26a9726e85f6bd33b5a1455219d8d56dd53d105e69e1be062119e8c7808a2";
         let provider = ETHEREUM_ENDPOINT.get().unwrap();
         let args = GetTransactionByHash::new(hash.to_owned());
-        provider.get_transaction_by_hash(args).await?;
+        provider.get_transaction_by_hash(&args).await?;
         Ok(())
     }
     #[tokio::test]

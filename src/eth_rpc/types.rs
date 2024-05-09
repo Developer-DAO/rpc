@@ -71,13 +71,13 @@ pub struct RawGetTransactionReceiptResponse {
     effective_gas_price: String,
     gas_used: String,
     contract_address: Option<String>,
-    // if we need logs in the future, we should create a type and parse them into 
+    // if we need logs in the future, we should create a type and parse them into
     // something more meaningful than JSON
     logs: serde_json::Value,
     logs_bloom: String,
     #[serde(rename = "type")]
     tx_type: String,
-    status: String,
+    pub status: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -85,20 +85,20 @@ pub struct RawGetTransactionReceiptResponse {
 pub struct RawGetTransactionByHashResponse {
     block_hash: String,
     block_number: String,
-    chain_id: String,
+    pub chain_id: String,
     from: String,
     gas: String,
     gas_price: String,
-    hash: String,
-    input: String,
+    pub hash: String,
+    pub input: String,
     max_fee_per_gas: Option<String>,
     max_priority_fee_per_gas: Option<String>,
     nonce: String,
-    to: String,
+    pub to: String,
     transaction_index: String,
     #[serde(rename = "type")]
     tx_type: String,
-    value: String,
+    pub value: String,
     v: String,
     r: String,
     s: String,
@@ -199,7 +199,7 @@ impl Provider {
 
     pub async fn get_transaction_by_hash(
         &self,
-        args: GetTransactionByHash,
+        args: &GetTransactionByHash,
     ) -> Result<RawGetTransactionByHashResponse, EthCallError> {
         let res = args.call(&self.url).await?.result;
         Ok(res)
