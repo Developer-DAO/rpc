@@ -1,4 +1,5 @@
-use crate::{database::types::Role, eth_rpc::types::Address};
+use crate::database::types::Role;
+use alloy::primitives::Address;
 use axum::{http::StatusCode, response::IntoResponse};
 use jwt_simple::algorithms::HS256Key;
 use serde::{Deserialize, Serialize};
@@ -7,9 +8,6 @@ use std::sync::OnceLock;
 
 pub static JWT_KEY: OnceLock<HS256Key> = OnceLock::new();
 pub static SERVER_EMAIL: OnceLock<Email> = OnceLock::new();
-
-
-
 
 pub struct JWTKey;
 
@@ -59,20 +57,3 @@ impl IntoResponse for RegisterUser {
         (StatusCode::OK, self).into_response()
     }
 }
-
-trait Normalize {
-    fn normalize(&self) -> Result<(), Box<dyn Error>>;
-}
-
-impl Normalize for RegisterUser {
-    fn normalize(&self) -> Result<(), Box<dyn Error>> {
-        Address::try_address(&self.wallet)?;
-        Ok(())
-    }
-}
-
-
-//pub struct UserPayment{
-  //  pub 
-//}
-

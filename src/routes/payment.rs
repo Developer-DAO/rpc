@@ -1,145 +1,348 @@
-use super::errors::ApiError;
-use crate::database::types::{ Asset, Chain as Chainlist, Database, FromHexStr};
-use crate::eth_rpc::errors::EthCallError;
-use crate::eth_rpc::types::{ GetTransactionByHash, RawGetTransactionByHashResponse, Receipt, Transfer, ETHEREUM_ENDPOINT};
-use crate::
-    database::types::{Payments, RELATIONAL_DATABASE}
-;
-use axum::http::Response;
-use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
-use dotenvy::dotenv;
-use num::{BigInt, Num};
+use super::types::Claims;
+use crate::database::types::{Asset, Chain};
+use crate::database::types::{Payments, RELATIONAL_DATABASE};
+use crate::eth_rpc::types::ETHEREUM_ENDPOINT;
+use alloy::eips::BlockId;
+use alloy::primitives::ruint::ParseError;
+use alloy::primitives::utils::{parse_units, UnitsError};
+use alloy::rpc::types::{BlockTransactionsKind, Transaction, TransactionReceipt};
+use alloy::transports::{RpcError, TransportErrorKind};
+use alloy::{
+    network::ReceiptResponse,
+    primitives::{
+        address, hex,
+        utils::{format_ether, format_units},
+        Address, Bytes, FixedBytes, U256,
+    },
+    providers::{Provider, ProviderBuilder},
+    sol,
+    sol_types::SolCall,
+};
+use axum::http::StatusCode;
+use axum::Extension;
+use axum::{response::IntoResponse, Json};
+use jwt_simple::claims::JWTClaims;
+use serde::{Deserialize, Serialize};
 use sqlx::types::time::OffsetDateTime;
-use std::error::Error;
-use std::env;
-use std::str::FromStr;
+use std::num::ParseFloatError;
+use std::sync::OnceLock;
+use std::{collections::HashMap, sync::LazyLock};
+use thiserror::Error;
+use tokio::task::JoinError;
+use tracing::info;
 
-pub fn convert_hex_to_dec(hex_str: &str) -> String {
-    BigInt::from_str_radix(hex_str, 16).unwrap().to_string()
+// const TOKENS_SUPPORTED: [&str; 8] = [
+//     "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
+//     "0x7F5c764cBc14f9669B88837ca1490cCa17c31607",
+//     "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+//     "0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8",
+//     "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",
+//     "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
+//     "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
+//     "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+// ];
+
+static WALLET: Address = address!("0b2C639c533813f4Aa9D7837CAf62653d097Ff85");
+
+pub struct TokenDetails {
+    pub decimals: u8,
+    pub network: Chain,
+    pub asset: Asset,
 }
 
-use core::str;
-//use ethers::core::utils::hex::FromHex;
-
-
-const TOKENS_SUPPORTED: [&str; 8] = [
-    "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
-    "0x7F5c764cBc14f9669B88837ca1490cCa17c31607",
-    "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
-    "0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8",
-    "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",
-    "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
-    "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
-    "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
-];
-
-
-
-#[tracing::instrument]
-pub async fn verify_subscription(
-    Path(email_address): Path<String>,
-) -> Result<impl IntoResponse, ApiError<PaymentError>> {
-    let payment_validation: PaymentValidation = sqlx::query_as!(
-        PaymentValidation,
-        "SELECT PaymentInfo.planExpiration AS plan_expiration
-        FROM PaymentInfo
-        WHERE PaymentInfo.customerEmail = $1",
-        email_address
-    )
-    .fetch_optional(RELATIONAL_DATABASE.get().unwrap())
-    .await?
-    .ok_or_else(|| ApiError::new(PaymentError::PaymentNotFound))?;
-
-    if payment_validation.plan_expiration < OffsetDateTime::now_utc() {
-        Err(ApiError::new(PaymentError::PaymentExpired))?
-    }
-
-    Ok((StatusCode::OK, "User payment is valid").into_response())
-}
-//Previous arg payload): Json<Payments>)
-async fn process_payment(customer_mail: &str, txhash: &str) -> Result<Response<axum::body::Body>, Box<dyn Error>> {
-    dotenv().ok();
-    let addy = env::var("PAYMENT_ADDY").unwrap();
-
-    let transaction = GetTransactionByHash::new(txhash.to_owned());
-    let provider = ETHEREUM_ENDPOINT.get().unwrap();
-    let tx = provider.get_transaction_by_hash(&transaction).await?;
-    let response = match tx.input.as_str() {
-        "0x" => process_ether_transfer(&addy, &tx, customer_mail).await,
-        _ => process_token_transfer(&addy, &tx, customer_mail).await,
-    };
-
-    // Convert all responses to a common type
-    response.map(|inner_response| inner_response.into_response())
-}
-
-async fn process_ether_transfer(addy: &str, tx: &RawGetTransactionByHashResponse, customer_mail: &str) -> Result<Json<Payments>, Box<dyn Error>> {
-    let to = tx.to.as_str();
-    println!("{:?}" , to);
-    if addy.to_lowercase() == to.to_lowercase() {
-        let tx_value = tx.value.trim_start_matches("0x");
-        let z = i64::from_str_radix(tx_value.into(), 16)?;
-        let payment = Payments {
-            customer_email: customer_mail.to_owned(),
-            transaction_hash: tx.hash.to_owned(),
-            asset: Asset::Ether,
-            amount: z,
-            chain: Chainlist::from_hex(&tx.chain_id)?,
-            date: OffsetDateTime::now_utc(),
-        };
-        println!("{:?}" , payment.amount);
-        is_txfinalized(&payment.transaction_hash).await?;
-        insert_payment(Json(&payment)).await?;
-        Ok(Json(payment))
-    } else {
-        Err(Box::new(ApiError::new(SubmitPaymentError::AddressMismatch)))
+impl TokenDetails {
+    pub fn new(decimals: u8, network: Chain, asset: Asset) -> TokenDetails {
+        TokenDetails {
+            decimals,
+            network,
+            asset,
+        }
     }
 }
 
-async fn process_token_transfer(addy: &str, tx: &RawGetTransactionByHashResponse, customer_mail: &str) -> Result<Json<Payments>, Box<dyn Error>> {
-    if TOKENS_SUPPORTED.iter().any(|e| tx.to.as_str().to_lowercase().contains(&e.to_lowercase())) {
-        let res = Transfer::from_str(&tx.input)?;
-        if addy.to_lowercase() == res.to.to_string().to_lowercase() {
-            let z = i64::from_str_radix(&res.amount.to_string(), 16)?;
+static TEST_TOKEN: OnceLock<HashMap<Address, TokenDetails>> = OnceLock::new();
+
+static TOKENS: LazyLock<HashMap<Address, TokenDetails>> = LazyLock::new(|| {
+    let mut map = HashMap::new();
+    map.insert(
+        address!("af88d065e77c8cc2239327c5edb3a432268e5831"),
+        TokenDetails::new(6, Chain::Arbitrum, Asset::USDC),
+    );
+    map.insert(
+        address!("833589fcd6edb6e08f4c7c32d4f71b54bda02913"),
+        TokenDetails::new(6, Chain::Base, Asset::USDC),
+    );
+    map.insert(
+        address!("3c499c542cEF5E3811e1192ce70d8cC03d5c3359"),
+        TokenDetails::new(6, Chain::Polygon, Asset::USDC),
+    );
+    map.insert(
+        // USDC.e is the bridged version of USDC pre-circle native issuance
+        address!("2791Bca1f2de4661ED88A30C99A7a9449Aa84174"),
+        TokenDetails::new(6, Chain::Polygon, Asset::USDC),
+    );
+    map.insert(
+        address!("0b2C639c533813f4Aa9D7837CAf62653d097Ff85"),
+        TokenDetails::new(6, Chain::Optimism, Asset::USDC),
+    );
+
+    map
+});
+
+sol! {
+    #[sol(rpc, bytecode="608060405234801561000f575f80fd5b506040518060400160405280600781526020017f4d79546f6b656e000000000000000000000000000000000000000000000000008152506040518060400160405280600381526020017f4d544b0000000000000000000000000000000000000000000000000000000000815250816003908161008b919061059a565b50806004908161009b919061059a565b5050506100bd336e13426172c74d822b878fe8000000006100c260201b60201c565b61077e565b5f73ffffffffffffffffffffffffffffffffffffffff168273ffffffffffffffffffffffffffffffffffffffff1603610132575f6040517fec442f0500000000000000000000000000000000000000000000000000000000815260040161012991906106a8565b60405180910390fd5b6101435f838361014760201b60201c565b5050565b5f73ffffffffffffffffffffffffffffffffffffffff168373ffffffffffffffffffffffffffffffffffffffff1603610197578060025f82825461018b91906106ee565b92505081905550610265565b5f805f8573ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020019081526020015f2054905081811015610220578381836040517fe450d38c00000000000000000000000000000000000000000000000000000000815260040161021793929190610730565b60405180910390fd5b8181035f808673ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020019081526020015f2081905550505b5f73ffffffffffffffffffffffffffffffffffffffff168273ffffffffffffffffffffffffffffffffffffffff16036102ac578060025f82825403925050819055506102f6565b805f808473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020019081526020015f205f82825401925050819055505b8173ffffffffffffffffffffffffffffffffffffffff168373ffffffffffffffffffffffffffffffffffffffff167fddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef836040516103539190610765565b60405180910390a3505050565b5f81519050919050565b7f4e487b71000000000000000000000000000000000000000000000000000000005f52604160045260245ffd5b7f4e487b71000000000000000000000000000000000000000000000000000000005f52602260045260245ffd5b5f60028204905060018216806103db57607f821691505b6020821081036103ee576103ed610397565b5b50919050565b5f819050815f5260205f209050919050565b5f6020601f8301049050919050565b5f82821b905092915050565b5f600883026104507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff82610415565b61045a8683610415565b95508019841693508086168417925050509392505050565b5f819050919050565b5f819050919050565b5f61049e61049961049484610472565b61047b565b610472565b9050919050565b5f819050919050565b6104b783610484565b6104cb6104c3826104a5565b848454610421565b825550505050565b5f90565b6104df6104d3565b6104ea8184846104ae565b505050565b5b8181101561050d576105025f826104d7565b6001810190506104f0565b5050565b601f82111561055257610523816103f4565b61052c84610406565b8101602085101561053b578190505b61054f61054785610406565b8301826104ef565b50505b505050565b5f82821c905092915050565b5f6105725f1984600802610557565b1980831691505092915050565b5f61058a8383610563565b9150826002028217905092915050565b6105a382610360565b67ffffffffffffffff8111156105bc576105bb61036a565b5b6105c682546103c4565b6105d1828285610511565b5f60209050601f831160018114610602575f84156105f0578287015190505b6105fa858261057f565b865550610661565b601f198416610610866103f4565b5f5b8281101561063757848901518255600182019150602085019450602081019050610612565b868310156106545784890151610650601f891682610563565b8355505b6001600288020188555050505b505050505050565b5f73ffffffffffffffffffffffffffffffffffffffff82169050919050565b5f61069282610669565b9050919050565b6106a281610688565b82525050565b5f6020820190506106bb5f830184610699565b92915050565b7f4e487b71000000000000000000000000000000000000000000000000000000005f52601160045260245ffd5b5f6106f882610472565b915061070383610472565b925082820190508082111561071b5761071a6106c1565b5b92915050565b61072a81610472565b82525050565b5f6060820190506107435f830186610699565b6107506020830185610721565b61075d6040830184610721565b949350505050565b5f6020820190506107785f830184610721565b92915050565b610de18061078b5f395ff3fe608060405234801561000f575f80fd5b5060043610610091575f3560e01c8063313ce56711610064578063313ce5671461013157806370a082311461014f57806395d89b411461017f578063a9059cbb1461019d578063dd62ed3e146101cd57610091565b806306fdde0314610095578063095ea7b3146100b357806318160ddd146100e357806323b872dd14610101575b5f80fd5b61009d6101fd565b6040516100aa9190610a5a565b60405180910390f35b6100cd60048036038101906100c89190610b0b565b61028d565b6040516100da9190610b63565b60405180910390f35b6100eb6102af565b6040516100f89190610b8b565b60405180910390f35b61011b60048036038101906101169190610ba4565b6102b8565b6040516101289190610b63565b60405180910390f35b6101396102e6565b6040516101469190610c0f565b60405180910390f35b61016960048036038101906101649190610c28565b6102ee565b6040516101769190610b8b565b60405180910390f35b610187610333565b6040516101949190610a5a565b60405180910390f35b6101b760048036038101906101b29190610b0b565b6103c3565b6040516101c49190610b63565b60405180910390f35b6101e760048036038101906101e29190610c53565b6103e5565b6040516101f49190610b8b565b60405180910390f35b60606003805461020c90610cbe565b80601f016020809104026020016040519081016040528092919081815260200182805461023890610cbe565b80156102835780601f1061025a57610100808354040283529160200191610283565b820191905f5260205f20905b81548152906001019060200180831161026657829003601f168201915b5050505050905090565b5f80610297610467565b90506102a481858561046e565b600191505092915050565b5f600254905090565b5f806102c2610467565b90506102cf858285610480565b6102da858585610512565b60019150509392505050565b5f6012905090565b5f805f8373ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020019081526020015f20549050919050565b60606004805461034290610cbe565b80601f016020809104026020016040519081016040528092919081815260200182805461036e90610cbe565b80156103b95780601f10610390576101008083540402835291602001916103b9565b820191905f5260205f20905b81548152906001019060200180831161039c57829003601f168201915b5050505050905090565b5f806103cd610467565b90506103da818585610512565b600191505092915050565b5f60015f8473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020019081526020015f205f8373ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020019081526020015f2054905092915050565b5f33905090565b61047b8383836001610602565b505050565b5f61048b84846103e5565b90507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff811461050c57818110156104fd578281836040517ffb8f41b20000000000000000000000000000000000000000000000000000000081526004016104f493929190610cfd565b60405180910390fd5b61050b84848484035f610602565b5b50505050565b5f73ffffffffffffffffffffffffffffffffffffffff168373ffffffffffffffffffffffffffffffffffffffff1603610582575f6040517f96c6fd1e0000000000000000000000000000000000000000000000000000000081526004016105799190610d32565b60405180910390fd5b5f73ffffffffffffffffffffffffffffffffffffffff168273ffffffffffffffffffffffffffffffffffffffff16036105f2575f6040517fec442f050000000000000000000000000000000000000000000000000000000081526004016105e99190610d32565b60405180910390fd5b6105fd8383836107d1565b505050565b5f73ffffffffffffffffffffffffffffffffffffffff168473ffffffffffffffffffffffffffffffffffffffff1603610672575f6040517fe602df050000000000000000000000000000000000000000000000000000000081526004016106699190610d32565b60405180910390fd5b5f73ffffffffffffffffffffffffffffffffffffffff168373ffffffffffffffffffffffffffffffffffffffff16036106e2575f6040517f94280d620000000000000000000000000000000000000000000000000000000081526004016106d99190610d32565b60405180910390fd5b8160015f8673ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020019081526020015f205f8573ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020019081526020015f208190555080156107cb578273ffffffffffffffffffffffffffffffffffffffff168473ffffffffffffffffffffffffffffffffffffffff167f8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925846040516107c29190610b8b565b60405180910390a35b50505050565b5f73ffffffffffffffffffffffffffffffffffffffff168373ffffffffffffffffffffffffffffffffffffffff1603610821578060025f8282546108159190610d78565b925050819055506108ef565b5f805f8573ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020019081526020015f20549050818110156108aa578381836040517fe450d38c0000000000000000000000000000000000000000000000000000000081526004016108a193929190610cfd565b60405180910390fd5b8181035f808673ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020019081526020015f2081905550505b5f73ffffffffffffffffffffffffffffffffffffffff168273ffffffffffffffffffffffffffffffffffffffff1603610936578060025f8282540392505081905550610980565b805f808473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020019081526020015f205f82825401925050819055505b8173ffffffffffffffffffffffffffffffffffffffff168373ffffffffffffffffffffffffffffffffffffffff167fddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef836040516109dd9190610b8b565b60405180910390a3505050565b5f81519050919050565b5f82825260208201905092915050565b8281835e5f83830152505050565b5f601f19601f8301169050919050565b5f610a2c826109ea565b610a3681856109f4565b9350610a46818560208601610a04565b610a4f81610a12565b840191505092915050565b5f6020820190508181035f830152610a728184610a22565b905092915050565b5f80fd5b5f73ffffffffffffffffffffffffffffffffffffffff82169050919050565b5f610aa782610a7e565b9050919050565b610ab781610a9d565b8114610ac1575f80fd5b50565b5f81359050610ad281610aae565b92915050565b5f819050919050565b610aea81610ad8565b8114610af4575f80fd5b50565b5f81359050610b0581610ae1565b92915050565b5f8060408385031215610b2157610b20610a7a565b5b5f610b2e85828601610ac4565b9250506020610b3f85828601610af7565b9150509250929050565b5f8115159050919050565b610b5d81610b49565b82525050565b5f602082019050610b765f830184610b54565b92915050565b610b8581610ad8565b82525050565b5f602082019050610b9e5f830184610b7c565b92915050565b5f805f60608486031215610bbb57610bba610a7a565b5b5f610bc886828701610ac4565b9350506020610bd986828701610ac4565b9250506040610bea86828701610af7565b9150509250925092565b5f60ff82169050919050565b610c0981610bf4565b82525050565b5f602082019050610c225f830184610c00565b92915050565b5f60208284031215610c3d57610c3c610a7a565b5b5f610c4a84828501610ac4565b91505092915050565b5f8060408385031215610c6957610c68610a7a565b5b5f610c7685828601610ac4565b9250506020610c8785828601610ac4565b9150509250929050565b7f4e487b71000000000000000000000000000000000000000000000000000000005f52602260045260245ffd5b5f6002820490506001821680610cd557607f821691505b602082108103610ce857610ce7610c91565b5b50919050565b610cf781610a9d565b82525050565b5f606082019050610d105f830186610cee565b610d1d6020830185610b7c565b610d2a6040830184610b7c565b949350505050565b5f602082019050610d455f830184610cee565b92915050565b7f4e487b71000000000000000000000000000000000000000000000000000000005f52601160045260245ffd5b5f610d8282610ad8565b9150610d8d83610ad8565b9250828201905080821115610da557610da4610d4b565b5b9291505056fea2646970667358221220a3c84ce57f4a6659703f00784344c7abe2aadadd6dd2e165fdb9cc4af220202264736f6c634300081a0033")]
+    contract ERC20 {
+        #[allow(missing_docs)]
+        function transfer(
+            address to,
+            uint256 amount
+        ) public returns (bool success);
+
+        #[allow(missing_docs)]
+        function transferFrom(
+            address from,
+            address to,
+            uint256 amount
+        ) public returns (bool success);
+    }
+}
+
+pub enum Transfer {
+    Transfer(ERC20::transferCall),
+    TransferFrom(ERC20::transferFromCall),
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct EthereumPayment {
+    pub chain: Chain,
+    pub hash: String,
+}
+
+pub async fn process_ethereum_payment(
+    Extension(jwt): Extension<JWTClaims<Claims>>,
+    Json(payload): Json<EthereumPayment>,
+) -> Result<impl IntoResponse, PaymentError> {
+    // todo: fetch endpoint based on chain specified
+    let endpoint = ETHEREUM_ENDPOINT.get().unwrap();
+
+    let hash = hex::decode(&payload.hash)?;
+    let mut fixed = [0u8; 32];
+    fixed.copy_from_slice(&hash);
+    let res: tokio::task::JoinHandle<Result<Transaction, PaymentError>> =
+        tokio::spawn(async move {
+            let eth = reqwest::Url::parse(endpoint).unwrap();
+            let provider = ProviderBuilder::new().on_http(eth);
+            provider
+                .get_transaction_by_hash(FixedBytes::from(&fixed))
+                .await?
+                .ok_or_else(|| PaymentError::TxNotFound)
+        });
+    let receipt: tokio::task::JoinHandle<Result<TransactionReceipt, PaymentError>> =
+        tokio::spawn(async move {
+            let eth = reqwest::Url::parse(endpoint).unwrap();
+            let provider = ProviderBuilder::new().on_http(eth);
+            provider
+                .get_transaction_receipt(FixedBytes::from(&fixed))
+                .await?
+                .ok_or_else(|| PaymentError::TxNotFound)
+        });
+
+    let last_safe_block: tokio::task::JoinHandle<Result<u64, PaymentError>> =
+        tokio::spawn(async move {
+            let eth = reqwest::Url::parse(endpoint).unwrap();
+            let provider = ProviderBuilder::new().on_http(eth);
+            provider
+                .get_block(BlockId::safe(), BlockTransactionsKind::Full)
+                .await?
+                .ok_or_else(|| PaymentError::TxNotFinalized)?
+                .header
+                .number
+                .ok_or_else(|| PaymentError::TxNotFinalized)
+        });
+
+    let (res, receipt, last_safe_block) = tokio::join!(res, receipt, last_safe_block);
+    let tx = receipt??;
+
+    if !tx.status() {
+        Err(PaymentError::TxFailed)?
+    }
+
+    if tx.block_number().is_none() {
+        Err(PaymentError::TxNotFinalized)?
+    }
+
+    if tx.block_number().unwrap() >= last_safe_block?? {
+        Err(PaymentError::TxNotFinalized)?
+    }
+
+    let res: &Transaction = &res??;
+
+    let credits = match res.input == Bytes::new() {
+        // ether
+        true => {
+            if res.from != jwt.custom.wallet {
+                Err(PaymentError::AddressMismatch)?
+            }
+            let to = res.to.ok_or_else(|| PaymentError::NoDestination)?;
+            if to != WALLET {
+                Err(PaymentError::IncorrectRecipient)?
+            }
+            let credits = calculate_credits_eth(res.value).await?;
+            info!(
+                "Num of credits purchased: {} for {} ETH",
+                credits,
+                format_ether(res.value)
+            );
+
+            credit_account(&jwt.custom.email, credits).await?;
             let payment = Payments {
-                customer_email: customer_mail.to_owned(),
-                transaction_hash: tx.hash.to_owned(),
-                asset: Asset::USDC,
-                amount: z,
-                chain: Chainlist::from_hex(&tx.chain_id)?,
+                customer_email: jwt.custom.email,
+                transaction_hash: hex::encode(hash),
+                asset: Asset::Ether,
+                amount: format_ether(res.value),
+                chain: payload.chain,
                 date: OffsetDateTime::now_utc(),
             };
-            is_txfinalized(&payment.transaction_hash).await?;
-            insert_payment(Json(&payment)).await?;
-            Ok(Json(payment))
-        } else {
-            Err(Box::new(ApiError::new(SubmitPaymentError::AddressMismatch)))
+
+            insert_payment(&payment).await?;
+            credits
         }
-    } else {
-        Err(Box::new(ApiError::new(SubmitPaymentError::UnsupportedToken)))
-    }
+        // token handling
+        false => {
+            let bytes = hex::decode(&res.input)?;
+            let decoded = if let Ok(d) = ERC20::transferCall::abi_decode(&bytes, true) {
+                Transfer::Transfer(d)
+            } else if let Ok(tf) = ERC20::transferFromCall::abi_decode(&bytes, true) {
+                Transfer::TransferFrom(tf)
+            } else {
+                Err(PaymentError::AbiDecodingError)?
+            };
+
+            let token_address = res.to.ok_or_else(|| PaymentError::UnsupportedToken)?;
+            let (amount, to) = match decoded {
+                Transfer::Transfer(tx) => (tx.amount, tx.to),
+                Transfer::TransferFrom(tx) => {
+                    if tx.from != jwt.custom.wallet {
+                        Err(PaymentError::AddressMismatch)?
+                    }
+                    (tx.amount, tx.to)
+                }
+            };
+
+            if to != WALLET {
+                Err(PaymentError::IncorrectRecipient)?
+            }
+
+            let token = if cfg!(test) {
+                TEST_TOKEN
+                    .get()
+                    .unwrap()
+                    .get(&token_address)
+                    .ok_or_else(|| PaymentError::UnsupportedToken)?
+            } else {
+                TOKENS
+                    .get(&token_address)
+                    .ok_or_else(|| PaymentError::UnsupportedToken)?
+            };
+
+            let credits = calculate_credits_token(token.asset, amount, token.decimals).await?;
+
+            info!(
+                "Num of credits purchased: {} for {}",
+                credits,
+                format_ether(amount)
+            );
+
+            credit_account(&jwt.custom.email, credits).await?;
+            let payment = Payments {
+                customer_email: jwt.custom.email,
+                transaction_hash: hex::encode(hash),
+                asset: token.asset,
+                amount: res.value.to_string(),
+                chain: payload.chain,
+                date: OffsetDateTime::now_utc(),
+            };
+
+            insert_payment(&payment).await?;
+
+            credits
+        }
+    };
+    println!("End of function");
+    Ok((StatusCode::OK, credits.to_string()).into_response())
 }
 
-async fn is_txfinalized(tx : &str) -> Result<bool , Box< dyn Error>>{
-    dotenv().ok();
-    let transaction = GetTransactionByHash::new(tx.to_owned());
-    let provider = ETHEREUM_ENDPOINT.get().unwrap();
-    let receipt = Receipt(transaction);
-    let tx = provider.get_transaction_receipt(receipt).await?;
-    if tx.status == "0x1"{
-        Ok(true)
-    } else {
-        Err(Box::new(ApiError::new(SubmitPaymentError::TxNotFinalized)))
-    }
+#[derive(Serialize, Deserialize, Debug)]
+pub struct PriceData {
+    data: AssetData,
 }
 
-async fn insert_payment(payment : Json<&Payments>) -> Result<impl IntoResponse, ApiError<SubmitPaymentError>>{
-    println!("Testing insert payment");
-    dotenv().unwrap();
-    Database::init(None).await.unwrap();
+#[derive(Serialize, Deserialize, Debug)]
+pub struct AssetData {
+    pub amount: String,
+    pub base: String,
+    pub currency: String,
+}
+
+async fn calculate_credits_eth(eth_amount: U256) -> Result<i64, PaymentError> {
+    let price: PriceData = reqwest::Client::new()
+        .get("https://api.coinbase.com/v2/prices/ETH-USD/spot")
+        .send()
+        .await?
+        .json::<PriceData>()
+        .await?;
+    println!("USD Price of Assets as string: {}", price.data.amount);
+    // to U256 in Fixed Point representation
+    let usd_price: U256 = parse_units(&price.data.amount, 18)?.into();
+    let usd_amount = usd_price * eth_amount;
+    println!("USD Price of Assets U256: {}", &usd_amount);
+    println!(
+        "USD Price of Assets Parsed: {}",
+        format_ether(usd_amount / U256::from(10).pow(U256::from(18)))
+    );
+    // 0.001 as WEI
+    let credits = usd_amount / U256::from(1000000000000000u64);
+    let credits_parsed = format_units(credits, "ether")?;
+    println!("Credits Parsed: {}", credits_parsed);
+
+    // alters pricing
+    println!("Credits: {}", credits);
+    let creds = format_ether(credits).parse::<f64>()?.round() as i64;
+    Ok(creds)
+}
+
+async fn calculate_credits_token(
+    asset: Asset,
+    amount: U256,
+    decimals: u8,
+) -> Result<i64, PaymentError> {
+    let price: PriceData = reqwest::Client::new()
+        .get(format!(
+            "https://api.coinbase.com/v2/prices/{}-USD/spot",
+            asset,
+        ))
+        .send()
+        .await?
+        .json::<PriceData>()
+        .await?;
+
+    let usd_price: U256 = parse_units(&price.data.amount, decimals)?.into();
+    let usd_amount = usd_price * amount;
+
+    // 0.001 as wei
+    let credits = usd_amount / U256::from(1000000000000000u64);
+    //    let credits_parsed = format_units(credits, units)?;
+
+    let creds = format_units(credits, decimals)?.parse::<f64>()?.round() as i64;
+
+    Ok(creds)
+}
+
+async fn insert_payment(payment: &Payments) -> Result<(), PaymentError> {
+    // append only -- isolated
     let db_connection = RELATIONAL_DATABASE.get().unwrap();
     sqlx::query!(
-        "INSERT INTO Payments(customerEmail, transactionHash, asset  , amount, chain, date) 
+        "INSERT INTO Payments(customerEmail, transactionHash, asset, amount, chain, date) 
             VALUES ($1, $2, $3, $4, $5, $6)",
         payment.customer_email,
         payment.transaction_hash,
@@ -150,156 +353,379 @@ async fn insert_payment(payment : Json<&Payments>) -> Result<impl IntoResponse, 
     )
     .execute(db_connection)
     .await?;
-    println!("Finish insert");
     Ok(())
-} 
-
-#[derive(Debug)]
-struct PaymentValidation {
-    plan_expiration: OffsetDateTime,
 }
 
-// Error handling
-#[derive(Debug)]
-pub enum PaymentError {
-    PaymentExpired,
-    PaymentNotFound,
-    DatabaseError(sqlx::Error),
-}
+async fn credit_account(email: &str, amount: i64) -> Result<(), PaymentError> {
+    let db_connection = RELATIONAL_DATABASE.get().unwrap();
+    let transaction = db_connection.begin().await?;
+    sqlx::query!(
+        "UPDATE Customers SET credits = $1 where email = $2",
+        amount,
+        email
+    )
+    .execute(db_connection)
+    .await?;
+    transaction.commit().await?;
 
-impl std::fmt::Display for PaymentError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            PaymentError::PaymentNotFound => write!(f, "The user doesn't have an active payment"),
-            PaymentError::DatabaseError(e) => write!(f, "{}", e),
-            PaymentError::PaymentExpired => write!(f, "The user payment is expired"),
-        }
-    }
-}
-
-impl std::error::Error for PaymentError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            PaymentError::PaymentExpired => None,
-            PaymentError::DatabaseError(e) => Some(e),
-            PaymentError::PaymentNotFound => None,
-        }
-    }
-}
-
-impl From<sqlx::Error> for ApiError<PaymentError> {
-    fn from(value: sqlx::Error) -> Self {
-        ApiError::new(PaymentError::DatabaseError(value))
-    }
+    Ok(())
 }
 
 //Error handling for submitPayment
-#[derive(Debug)]
-pub enum SubmitPaymentError {
-    TxhashError(EthCallError),
-    TxDataError,
+#[derive(Error, Debug)]
+pub enum PaymentError {
+    #[error(transparent)]
+    ParseError(#[from] ParseError),
+    #[error(transparent)]
+    UnitsError(#[from] UnitsError),
+    #[error(
+        "Failed to decode the transaction's calldata into ERC20::Transfer or ERC20::TransferFrom"
+    )]
+    AbiDecodingError,
+    #[error("No destination for tx")]
+    NoDestination,
+    #[error("Transaction failed")]
+    TxFailed,
+    #[error(transparent)]
+    RpcError(#[from] RpcError<TransportErrorKind>),
+    #[error(transparent)]
+    JoinError(#[from] JoinError),
+    #[error(transparent)]
+    PriceFetchError(#[from] reqwest::Error),
+    #[error(transparent)]
+    HexError(#[from] hex::FromHexError),
+    #[error("Tx destination not valid")]
     AddressMismatch,
+    #[error("Value not sent to any of our wallets")]
+    IncorrectRecipient,
+    #[error("Token is not supported")]
     UnsupportedToken,
+    #[error("Tx not finalized")]
     TxNotFinalized,
-    DatabaseError(sqlx::Error),
+    #[error(transparent)]
+    DatabaseError(#[from] sqlx::Error),
+    #[error(transparent)]
+    ParseFloatError(#[from] ParseFloatError),
+    #[error("Transaction not found")]
+    TxNotFound,
 }
 
-impl std::fmt::Display for SubmitPaymentError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            SubmitPaymentError::TxDataError => write!(f, "Can't get data from Tx"),
-            SubmitPaymentError::DatabaseError(e) => write!(f, "{}", e),
-            SubmitPaymentError::AddressMismatch => write!(f, "Tx destinatary is not valid"),
-            SubmitPaymentError::TxhashError(e) => write!(f, "Transaction error: {}", e),
-            SubmitPaymentError::UnsupportedToken =>write!(f, "Token not supported") , 
-            SubmitPaymentError::TxNotFinalized => write!(f , "Tx not finalized")
-        }
+impl IntoResponse for PaymentError {
+    fn into_response(self) -> axum::response::Response {
+        (StatusCode::INTERNAL_SERVER_ERROR, self.to_string()).into_response()
     }
 }
-
-
-impl std::error::Error for SubmitPaymentError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            SubmitPaymentError::TxDataError | SubmitPaymentError::AddressMismatch => None,
-            SubmitPaymentError::DatabaseError(e) => Some(e),
-            SubmitPaymentError::TxhashError(e) => Some(e),
-            SubmitPaymentError::UnsupportedToken => None,
-            SubmitPaymentError::TxNotFinalized => None
-        }
-    }
-}
-
-
-impl From<EthCallError> for SubmitPaymentError {
-    fn from(error: EthCallError) -> Self {
-        SubmitPaymentError::TxhashError(error)
-    }
-}
-impl From<sqlx::Error> for ApiError<SubmitPaymentError> {
-    fn from(error: sqlx::Error) -> Self {
-        ApiError::new(SubmitPaymentError::DatabaseError(error))
-    }
-}
-
-
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::database::types::{Asset, Chain, Payments};
-    use crate::eth_rpc::types::Endpoints;
-    use sqlx::types::time::OffsetDateTime;
-    
+    use alloy::{
+        network::{EthereumWallet, TransactionBuilder},
+        node_bindings::Anvil,
+        signers::local::PrivateKeySigner,
+    };
 
-    use std::error::Error as StdError;
+    use crate::{
+        database::types::RELATIONAL_DATABASE,
+        middleware::jwt_auth::verify_jwt,
+        register_user,
+        routes::{
+            activate::{activate_account, ActivationRequest},
+            api_keys::generate_api_keys,
+            login::LoginRequest,
+            types::RegisterUser,
+        },
+        user_login, Database, Email, JWTKey, TcpListener,
+    };
+    use axum::{middleware::from_fn, routing::post, Router};
+    use dotenvy::dotenv;
 
     #[tokio::test]
-    async fn usdc_tx() -> Result<(), Box<dyn StdError>> {
-        // Initialize endpoints and handle potential errors explicitly
-        Endpoints::init()?;
+    async fn test_eth_credit() {
+        // 2 ETH
+        let res = calculate_credits_eth(U256::from(2000000000000000000u64))
+            .await
+            .unwrap();
+        assert!(res >= 3_000_000);
 
-        println!("Sending payment");
-        let arg1 = "0x8215cabb4634fac018ce551b20b381c62a6c808510e60eb0595f580fd8b8bf34";
-
-        // Process the payment and handle results explicitly
-        let response = process_payment("customer2@example.com", arg1).await;
-        match response {
-            Ok(_) => Ok(()),
-            Err(e) => Err(e),  // Assuming e is already Box<dyn StdError>
-        }
-    }
-    #[tokio::test]
-    async fn eth_tx() -> Result<(), Box<dyn StdError>> {
-        // Initialize endpoints and handle potential errors explicitly
-        Endpoints::init()?;
-    
-        println!("Sending payment");
-        let arg1 = "0x8fca1317d09136312b6edc742dd868e6d9e16982a8544d60d8d2ee79b304db0e";
-
-        // Process the payment and handle results explicitly
-        let response = process_payment("customer@example.com", arg1).await;
-        match response {
-            Ok(_) => Ok(()),
-            Err(e) => Err(e),  // Assuming e is already Box<dyn StdError>
-        }
+        println!("Total credits from eth: {res}")
     }
 
     #[tokio::test]
-    async fn payment_insert() ->Result<(), jwt_simple::Error>{
-        let payment = Payments {
-            customer_email: "customer@example.com".to_string(),
-            transaction_hash: "0x8215cabb4634fac018ce551b20b381c62a6c808510e60eb0595f580fd8b8bf34"
-                .to_string(),
-            asset: Asset::USDC,
-            amount: 1000,
-            chain: Chain::Optimism,
-            date: OffsetDateTime::now_utc(),
+    async fn test_token_credit() {
+        // 2 ETH
+        let res = calculate_credits_token(Asset::USDC, U256::from(50000000000000000000u128), 6)
+            .await
+            .unwrap();
+        assert!(res >= 49000);
+        println!("Total credits from tokens: {res}")
+    }
+
+    #[tokio::test]
+    async fn test_eth_payment() {
+        // get eth provider
+        // send tx to WALLET and await SAFE
+        // process it
+        // profit
+
+        dotenv().unwrap();
+        JWTKey::init().unwrap();
+        Database::init().await.unwrap();
+        Email::init().unwrap();
+        let anvil = Anvil::new().block_time_f64(0.001).try_spawn().unwrap();
+        ETHEREUM_ENDPOINT.get_or_init(|| anvil.endpoint().leak());
+
+        // Set up signer from the first default Anvil account (Alice).
+        let signer: PrivateKeySigner = anvil.keys()[0].clone().into();
+        let wallet = EthereumWallet::from(signer.clone());
+
+        let rpc_url = anvil.endpoint().parse().unwrap();
+        let provider = ProviderBuilder::new()
+            .with_recommended_fillers()
+            .wallet(wallet)
+            .on_http(rpc_url);
+        // 1 ETH
+        let tx = provider
+            .transaction_request()
+            .with_value(U256::from(1000000000000000000u128))
+            .with_to(WALLET);
+
+        let hash = provider
+            .send_transaction(tx)
+            .await
+            .unwrap()
+            .with_required_confirmations(12)
+            .watch()
+            .await
+            .unwrap();
+        tokio::spawn(async move {
+            let app = Router::new()
+                .route("/api/register", post(register_user))
+                .route("/api/activate", post(activate_account))
+                .route(
+                    "/api/pay",
+                    post(process_ethereum_payment).route_layer(from_fn(verify_jwt)),
+                )
+                .route("/api/login", post(user_login))
+                .route(
+                    "/api/keys",
+                    post(generate_api_keys).route_layer(from_fn(verify_jwt)),
+                );
+            let listener = TcpListener::bind("0.0.0.0:3069").await.unwrap();
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        reqwest::Client::new()
+            .post("http://localhost:3069/api/register")
+            .json(&RegisterUser {
+                email: "0xe3024@gmail.com".to_string(),
+                wallet: signer.address().to_string(),
+                password: "test".to_string(),
+            })
+            .send()
+            .await
+            .unwrap();
+
+        pub struct Code {
+            verificationcode: String,
+        }
+
+        let code = sqlx::query_as!(
+            Code,
+            "SELECT verificationCode FROM Customers WHERE email = $1",
+            "0xe3024@gmail.com"
+        )
+        .fetch_one(RELATIONAL_DATABASE.get().unwrap())
+        .await
+        .unwrap();
+
+        let ar = ActivationRequest {
+            code: code.verificationcode,
+            email: "0xe3024@gmail.com".to_string(),
         };
-        println!("{:?}" , payment.asset);
-        insert_payment(axum::Json(&payment)).await.unwrap();
-        Ok(())
-        
+
+        reqwest::Client::new()
+            .post("http://localhost:3069/api/activate")
+            .json(&ar)
+            .send()
+            .await
+            .unwrap();
+
+        let lr = LoginRequest {
+            email: "0xe3024@gmail.com".to_string(),
+            password: "test".to_string(),
+        };
+
+        let ddrpc_client = reqwest::Client::builder()
+            .cookie_store(true)
+            .build()
+            .unwrap();
+
+        ddrpc_client
+            .post("http://localhost:3069/api/login")
+            .json(&lr)
+            .send()
+            .await
+            .unwrap();
+
+        let payment = EthereumPayment {
+            chain: Chain::Optimism,
+            hash: hash.to_string(),
+        };
+
+        #[derive(Serialize, Deserialize, Debug)]
+        struct PaymentResponse {
+            purchased_credits: u64,
+        }
+
+        let res = ddrpc_client
+            .post("http://localhost:3069/api/pay")
+            .json(&payment)
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+
+        println!("Credits from payment: {:?}", res);
+        let payment = res.parse::<u64>().unwrap();
+        assert!(payment > 0);
     }
 
+    #[tokio::test]
+    async fn test_usdc_payment_optimism() {
+        dotenv().unwrap();
+        JWTKey::init().unwrap();
+        Database::init().await.unwrap();
+        Email::init().unwrap();
+        let anvil = Anvil::new()
+            .block_time_f64(0.001)
+            .port(3011u16)
+            .try_spawn()
+            .unwrap();
+
+        ETHEREUM_ENDPOINT.get_or_init(|| anvil.endpoint().leak());
+
+        // Set up signer from the first default Anvil account (Alice).
+        let signer: PrivateKeySigner = anvil.keys()[0].clone().into();
+        let wallet = EthereumWallet::from(signer.clone());
+
+        let rpc_url = anvil.endpoint().parse().unwrap();
+        let provider = ProviderBuilder::new()
+            .with_recommended_fillers()
+            .wallet(wallet)
+            .on_http(rpc_url);
+
+        let contract = ERC20::deploy(&provider).await.unwrap();
+        let addy = *contract.address();
+        TEST_TOKEN.get_or_init(|| {
+            let mut map = HashMap::new();
+            map.insert(addy, TokenDetails::new(18, Chain::Optimism, Asset::USDC));
+            map
+        });
+        let hash = contract
+            .transfer(WALLET, U256::from(1000u128 * (10u128.pow(18u32))))
+            .send()
+            .await
+            .unwrap()
+            .with_required_confirmations(12)
+            .watch()
+            .await
+            .unwrap();
+
+        tokio::spawn(async move {
+            let app = Router::new()
+                .route("/api/register", post(register_user))
+                .route("/api/activate", post(activate_account))
+                .route(
+                    "/api/pay",
+                    post(process_ethereum_payment).route_layer(from_fn(verify_jwt)),
+                )
+                .route("/api/login", post(user_login))
+                .route(
+                    "/api/keys",
+                    post(generate_api_keys).route_layer(from_fn(verify_jwt)),
+                );
+            let listener = TcpListener::bind("0.0.0.0:3072").await.unwrap();
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        reqwest::Client::new()
+            .post("http://localhost:3072/api/register")
+            .json(&RegisterUser {
+                email: "0xe3024@gmail.com".to_string(),
+                wallet: signer.address().to_string(),
+                password: "test".to_string(),
+            })
+            .send()
+            .await
+            .unwrap();
+
+        pub struct Code {
+            verificationcode: String,
+        }
+
+        let code = sqlx::query_as!(
+            Code,
+            "SELECT verificationCode FROM Customers WHERE email = $1",
+            "0xe3024@gmail.com"
+        )
+        .fetch_one(RELATIONAL_DATABASE.get().unwrap())
+        .await
+        .unwrap();
+
+        let ar = ActivationRequest {
+            code: code.verificationcode,
+            email: "0xe3024@gmail.com".to_string(),
+        };
+
+        reqwest::Client::new()
+            .post("http://localhost:3072/api/activate")
+            .json(&ar)
+            .send()
+            .await
+            .unwrap();
+
+        let lr = LoginRequest {
+            email: "0xe3024@gmail.com".to_string(),
+            password: "test".to_string(),
+        };
+
+        let ddrpc_client = reqwest::Client::builder()
+            .cookie_store(true)
+            .build()
+            .unwrap();
+
+        ddrpc_client
+            .post("http://localhost:3072/api/login")
+            .json(&lr)
+            .send()
+            .await
+            .unwrap();
+
+        let payment = EthereumPayment {
+            chain: Chain::Optimism,
+            hash: hash.to_string(),
+        };
+
+        #[derive(Serialize, Deserialize, Debug)]
+        struct PaymentResponse {
+            purchased_credits: u64,
+        }
+
+        let res = ddrpc_client
+            .post("http://localhost:3072/api/pay")
+            .json(&payment)
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+
+        println!("Credits from payment: {:?}", res);
+        let payment = res.parse::<u64>().unwrap();
+        assert!(payment > 0);
+    }
 }

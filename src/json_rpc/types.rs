@@ -16,11 +16,11 @@ pub struct JsonRpcRequest {
 }
 
 impl JsonRpcRequest {
-    pub fn new(method: String, params: Option<serde_json::Value>, id: u16 ) -> Self {
+    pub fn new(method: String, params: Option<serde_json::Value>, id: u16) -> Self {
         Self {
-            jsonrpc: "2.0".to_owned(), 
+            jsonrpc: "2.0".to_owned(),
             method,
-            params, 
+            params,
             id,
         }
     }

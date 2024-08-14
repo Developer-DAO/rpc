@@ -1,57 +1,31 @@
-use std::fmt::{self, Display, Formatter};
-
 use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
 
-use crate::{
-    json_rpc::types::JsonRpcRequest,
-    routes::{errors::ApiError, relayer::types::PoktChains},
-};
-
 use super::types::RelayErrors;
+use crate::{json_rpc::types::JsonRpcRequest, routes::relayer::types::PoktChains};
+use thiserror::Error;
 
 pub async fn route_call(
     Path(route_info): Path<[String; 2]>,
     Json(body): Json<JsonRpcRequest>,
-) -> Result<impl IntoResponse, ApiError<RouterErrors>> {
+) -> Result<impl IntoResponse, RouterErrors> {
     let raw_destination = route_info
         .first()
-        .ok_or_else(|| ApiError::new(RouterErrors::DestinationError))?;
+        .ok_or_else(|| RouterErrors::DestinationError)?;
     let dest = raw_destination.parse::<PoktChains>()?;
     let result = dest.relay_pokt_transaction(&body).await?;
     Ok((StatusCode::OK, result))
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum RouterErrors {
+    #[error("Could not parse destination from the first Path parameter")]
     DestinationError,
-    Relay(RelayErrors),
+    #[error(transparent)]
+    Relay(#[from] RelayErrors),
 }
 
-impl Display for RouterErrors {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            RouterErrors::DestinationError => write!(
-                f,
-                "Could not parse destination from the first Path parameter"
-            ),
-            RouterErrors::Relay(_) => write!(f, "An error occured while relaying the transaction"),
-        }
-    }
-}
-
-impl std::error::Error for RouterErrors {
-
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            RouterErrors::DestinationError => None,
-            RouterErrors::Relay(e) => Some(e),
-        }
-    }
-
-}
-
-impl From<RelayErrors> for ApiError<RouterErrors> {
-    fn from(value: RelayErrors) -> Self {
-        ApiError::new(RouterErrors::Relay(value))
+impl IntoResponse for RouterErrors {
+    fn into_response(self) -> axum::response::Response {
+        (StatusCode::INTERNAL_SERVER_ERROR, self.to_string()).into_response()
     }
 }

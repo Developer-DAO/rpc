@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use sqlx::{migrate, FromRow, PgPool, Pool, Postgres};
+use sqlx::{migrate, postgres::PgPoolOptions, FromRow, Pool, Postgres};
 use std::fmt::Display;
 use std::str::FromStr;
 use std::sync::OnceLock;
@@ -12,15 +12,13 @@ pub static RELATIONAL_DATABASE: OnceLock<Pool<Postgres>> = OnceLock::new();
 pub struct Database;
 
 impl Database {
-    pub async fn init(test: Option<()>) -> Result<(), Box<dyn std::error::Error>> {
-        let pool = match test {
-            Some(_) => PgPool::connect(&dotenvy::var("TESTING_DATABASE_URL").unwrap())
-                .await
-                .unwrap(),
-            None => PgPool::connect(&dotenvy::var("DATABASE_URL").unwrap())
-                .await
-                .unwrap(),
-        };
+    pub async fn init() -> Result<(), Box<dyn std::error::Error>> {
+        let pool = PgPoolOptions::new()
+            // todo: fix this for prod
+            .after_release(|_, _| Box::pin(async move { Ok(false) }))
+            .connect(&dotenvy::var("DATABASE_URL").unwrap())
+            .await
+            .unwrap();
         migrate!("./migrations").run(&pool).await.unwrap();
         RELATIONAL_DATABASE.get_or_init(|| pool);
         Ok(())
@@ -50,7 +48,7 @@ pub struct Payments {
     pub customer_email: String,
     pub transaction_hash: String,
     pub asset: Asset,
-    pub amount: i64,
+    pub amount: String,
     pub chain: Chain,
     pub date: OffsetDateTime,
 }
@@ -69,7 +67,7 @@ pub enum Plan {
     Gigachad,
 }
 
-#[derive(Debug, Clone, Copy , Serialize ,  Deserialize, sqlx::Type)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, sqlx::Type)]
 #[sqlx(rename_all = "lowercase", type_name = "chain")]
 pub enum Chain {
     Optimism,
@@ -78,7 +76,7 @@ pub enum Chain {
     Base,
 }
 
-#[derive(Debug, Clone , Copy ,Serialize ,  Deserialize, sqlx::Type)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, sqlx::Type)]
 #[sqlx(rename_all = "lowercase", type_name = "asset")]
 pub enum Asset {
     Ether,
@@ -154,7 +152,7 @@ impl FromHexStr for Chain {
             "0x89" => Chain::Polygon,
             "0x2105" => Chain::Base,
             "0xa4b1" => Chain::Arbitrum,
-            _ => return Err(ChainidError(s.to_string(), "Invalid ChainId")),
+            _ => Err(ChainidError(s.to_string(), "Invalid ChainId"))?,
         };
 
         Ok(chain)
@@ -201,13 +199,11 @@ impl FromStr for Asset {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let plan = match s {
-            "ETHER"|"ether" => Asset::Ether,
-            "USDC"|"usdc" => Asset::USDC,
+            "ETHER" | "ether" => Asset::Ether,
+            "USDC" | "usdc" => Asset::USDC,
             _ => Err(ParsingError(s.to_string(), "Asset"))?,
         };
 
         Ok(plan)
     }
 }
-
-

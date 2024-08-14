@@ -2,13 +2,13 @@ use super::{
     errors::ApiError,
     types::{Claims, JWT_KEY},
 };
-use crate::{
-    database::{
-        errors::ParsingError,
-        types::{Role, RELATIONAL_DATABASE},
-    },
-    eth_rpc::types::Address,
+use crate::database::{
+    errors::ParsingError,
+    types::{Role, RELATIONAL_DATABASE},
 };
+
+use alloy::primitives::Address;
+
 use axum::{extract::Query, http::StatusCode, response::IntoResponse, Json};
 use jwt_simple::{algorithms::MACLike, reexports::coarsetime::Duration};
 use rand::{rngs::ThreadRng, Rng};
@@ -87,7 +87,8 @@ pub async fn pk_login_response(
         let hash_string = hex::encode(hash);
         format!("0x{}", &hash_string[hash_string.len() - 41..])
     };
-    let user = sqlx::query_as!(PkLoginVerification, 
+    let user = sqlx::query_as!(
+        PkLoginVerification, 
         r#"SELECT verificationCode, wallet, email, role as "role!: Role" FROM Customers where email = $1"#,
         &verification_address
     ).fetch_optional(db)
@@ -123,7 +124,7 @@ pub async fn pk_login_response(
     let user_info = Claims {
         role: user.role,
         email: user.email,
-        wallet: Address(user.wallet),
+        wallet: Address::from_str(&user.wallet).unwrap(),
     };
     let claims = jwt_simple::claims::Claims::with_custom_claims(user_info, Duration::from_hours(2));
 

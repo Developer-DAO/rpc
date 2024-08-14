@@ -7,7 +7,6 @@ use crate::routes::{
     activate::activate_account,
     api_keys::{delete_key, generate_api_keys, get_all_api_keys},
     login::user_login,
-    payment::verify_subscription,
     pk_login::{pk_login_challenge, pk_login_response},
     recovery::{recover_password_email, update_password},
     register::register_user,
@@ -40,7 +39,7 @@ async fn main() {
     dotenv().unwrap();
     //    PoktChains::init_deployment_url();
     JWTKey::init().unwrap();
-    Database::init(None).await.unwrap();
+    Database::init().await.unwrap();
     Email::init().unwrap();
     tracing_subscriber::fmt()
         .with_span_events(FmtSpan::CLOSE)
@@ -59,10 +58,10 @@ async fn main() {
         .allow_methods([Method::POST])
         .allow_headers([header::CONTENT_TYPE]);
 
-    let relayer = Router::new()
-        .route("/rpc/:chain/:api_key", post(route_call))
-        .route_layer(from_fn(validate_subscription_and_update_user_calls))
-        .layer(cors_rpc);
+    // let relayer = Router::new()
+    //     .route("/rpc/:chain/:api_key", post(route_call))
+    //     .route_layer(from_fn(validate_subscription_and_update_user_calls))
+    //     .layer(cors_rpc);
 
     let api_keys = Router::new()
         .route("/api/keys", get(get_all_api_keys).post(generate_api_keys))
@@ -75,7 +74,7 @@ async fn main() {
             get(|| async { (StatusCode::OK, "GM, we are fully operational").into_response() }),
         )
         .route("/api/register", post(register_user))
-        .route("/api/verifypayment/:emailaddress", get(verify_subscription))
+        //       .route("/api/verifypayment/:emailaddress", get(verify_subscription))
         .route("/api/activate", post(activate_account))
         .route("/api/login", post(user_login))
         .route(
@@ -85,8 +84,8 @@ async fn main() {
         .route("/api/recovery", post(update_password))
         .route("/api/recovery/:email", get(recover_password_email))
         .merge(api_keys)
-        .layer(cors_api)
-        .merge(relayer);
+        .layer(cors_api);
+//        .merge(relayer);
     info!("Initialized D_D RPC on 0.0.0.0:3000");
     let listener = TcpListener::bind("0.0.0.0:3000").await.unwrap();
     axum::serve(listener, app).await.unwrap();

@@ -6,7 +6,7 @@ use std::{
 #[derive(Debug)]
 pub struct ParsingError(pub String, pub &'static str);
 #[derive(Debug)]
-pub struct ChainidError(pub String , pub &'static str);
+pub struct ChainidError(pub String, pub &'static str);
 impl Display for ParsingError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(

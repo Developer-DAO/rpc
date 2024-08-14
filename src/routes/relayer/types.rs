@@ -4,10 +4,11 @@ use std::{
     fmt::{self, Display, Formatter},
     future::Future,
     str::FromStr,
-    sync::OnceLock,
+    sync::LazyLock,
 };
 
-pub static GATEWAY_URL: OnceLock<&'static str> = OnceLock::new();
+pub static GATEWAY_URL: LazyLock<&'static str> =
+    LazyLock::new(|| dotenvy::var("GATEWAY_URL").unwrap().leak());
 
 pub trait Relayer {
     fn relay_transaction(
@@ -16,11 +17,11 @@ pub trait Relayer {
     ) -> impl Future<Output = Result<String, RelayErrors>>;
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum PoktChains {
     Arbitrum,
     ArbitrumSepoliaArchival,
     AmoyTestnetArchival,
-    OptimismSepoliaArchival,
     AVAX,
     AVAXArchival,
     BOBA,
@@ -28,6 +29,7 @@ pub enum PoktChains {
     BaseTestnet,
     BinanceSmartChain,
     BinanceSmartChainArchival,
+    BnbArchivalOp,
     CelestiaArchival,
     Celo,
     DFKchainSubnet,
@@ -38,7 +40,9 @@ pub enum PoktChains {
     EthereumArchivalTrace,
     EthereumHighGas,
     Evmos,
+    //    Experimental,
     Fantom,
+    FraxArchival,
     Fuse,
     FuseArchival,
     Gnosis,
@@ -63,8 +67,10 @@ pub enum PoktChains {
     OasysArchival,
     Optimism,
     OptimismArchival,
+    OptimismSepoliaArchival,
     Osmosis,
     Pocket,
+    PocketArchival,
     PolygonMatic,
     PolygonMaticArchival,
     PolygonMumbai,
@@ -79,20 +85,100 @@ pub enum PoktChains {
     Starknet,
     StarknetTestnet,
     Sui,
+    Taiko,
+    TaikoHeklaTestnet,
     Velas,
     VelasArchival,
     ZkSync,
     PoktTestnetEthereumMock,
 }
 
-impl PoktChains {
-    pub const fn id(&self) -> &'static str {
+impl fmt::Display for PoktChains {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::PoktTestnetEthereumMock => "0007",
+            PoktChains::Arbitrum => write!(f, "0066"),
+            PoktChains::ArbitrumSepoliaArchival => write!(f, "A086"),
+            PoktChains::AmoyTestnetArchival => write!(f, "A085"),
+            PoktChains::OptimismSepoliaArchival => write!(f, "A087"),
+            PoktChains::AVAX => write!(f, "0003"),
+            PoktChains::AVAXArchival => write!(f, "A003"),
+            PoktChains::BOBA => write!(f, "0048"),
+            PoktChains::Base => write!(f, "0079"),
+            PoktChains::BaseTestnet => write!(f, "0080"),
+            PoktChains::BinanceSmartChain => write!(f, "0004"),
+            PoktChains::BinanceSmartChainArchival => write!(f, "0010"),
+            PoktChains::BnbArchivalOp => write!(f, "A089"),
+            PoktChains::CelestiaArchival => write!(f, "A0CA"),
+            PoktChains::Celo => write!(f, "0065"),
+            PoktChains::DFKchainSubnet => write!(f, "03DF"),
+            PoktChains::Dogechain => write!(f, "0059"),
+            PoktChains::EthereumBeacon => write!(f, "B021"),
+            PoktChains::Ethereum => write!(f, "0021"),
+            PoktChains::EthereumArchival => write!(f, "0022"),
+            PoktChains::EthereumArchivalTrace => write!(f, "0028"),
+            PoktChains::EthereumHighGas => write!(f, "0062"),
+            PoktChains::Evmos => write!(f, "0046"),
+            //Experimental = write!(f, "BE2A"),
+            PoktChains::Fantom => write!(f, "0049"),
+            PoktChains::FraxArchival => write!(f, "A088"),
+            PoktChains::Fuse => write!(f, "0005"),
+            PoktChains::FuseArchival => write!(f, "000A"),
+            PoktChains::Gnosis => write!(f, "0027"),
+            PoktChains::GnosisArchival => write!(f, "000C"),
+            PoktChains::Goerli => write!(f, "0026"),
+            PoktChains::GoerliArchival => write!(f, "0063"),
+            PoktChains::HarmonyShard0 => write!(f, "0040"),
+            PoktChains::HoleskyBeacon => write!(f, "B081"),
+            PoktChains::HoleskyTestnet => write!(f, "0081"),
+            PoktChains::IoTeX => write!(f, "0044"),
+            PoktChains::Kava => write!(f, "0071"),
+            PoktChains::KavaArchival => write!(f, "0072"),
+            PoktChains::Klatyn => write!(f, "0056"),
+            PoktChains::Kovan => write!(f, "0024"),
+            PoktChains::Meter => write!(f, "0057"),
+            PoktChains::Metis => write!(f, "0058"),
+            PoktChains::Moonbeam => write!(f, "0050"),
+            PoktChains::Moonriver => write!(f, "0051"),
+            PoktChains::Near => write!(f, "0052"),
+            PoktChains::OKC => write!(f, "0047"),
+            PoktChains::Oasys => write!(f, "0070"),
+            PoktChains::OasysArchival => write!(f, "0069"),
+            PoktChains::Optimism => write!(f, "0053"),
+            PoktChains::OptimismArchival => write!(f, "A053"),
+            PoktChains::Osmosis => write!(f, "0054"),
+            PoktChains::Pocket => write!(f, "0001"),
+            PoktChains::PocketArchival => write!(f, "A001"),
+            PoktChains::PolygonMatic => write!(f, "0009"),
+            PoktChains::PolygonMaticArchival => write!(f, "000B"),
+            PoktChains::PolygonMumbai => write!(f, "000F"),
+            PoktChains::PolygonZkEVM => write!(f, "0074"),
+            PoktChains::Radix => write!(f, "0083"),
+            PoktChains::Scroll => write!(f, "0082"),
+            PoktChains::ScrollTestnet => write!(f, "0075"),
+            PoktChains::SepoliaTestnet => write!(f, "0077"),
+            PoktChains::SepoliaArchival => write!(f, "0078"),
+            PoktChains::Solana => write!(f, "0006"),
+            PoktChains::SolanaCustom => write!(f, "C006"),
+            PoktChains::Starknet => write!(f, "0060"),
+            PoktChains::StarknetTestnet => write!(f, "0061"),
+            PoktChains::Sui => write!(f, "0076"),
+            PoktChains::Taiko => write!(f, "7A00"),
+            PoktChains::TaikoHeklaTestnet => write!(f, "7A10"),
+            PoktChains::Velas => write!(f, "0067"),
+            PoktChains::VelasArchival => write!(f, "0068"),
+            PoktChains::ZkSync => write!(f, "0084"),
+            PoktChains::PoktTestnetEthereumMock => write!(f, "0007"),
+        }
+    }
+}
+
+impl PoktChains {
+    fn id(&self) -> &'static str {
+        match self {
             PoktChains::Arbitrum => "0066",
+            PoktChains::ArbitrumSepoliaArchival => "A086",
             PoktChains::AmoyTestnetArchival => "A085",
             PoktChains::OptimismSepoliaArchival => "A087",
-            PoktChains::ArbitrumSepoliaArchival => "A086",
             PoktChains::AVAX => "0003",
             PoktChains::AVAXArchival => "A003",
             PoktChains::BOBA => "0048",
@@ -100,6 +186,7 @@ impl PoktChains {
             PoktChains::BaseTestnet => "0080",
             PoktChains::BinanceSmartChain => "0004",
             PoktChains::BinanceSmartChainArchival => "0010",
+            PoktChains::BnbArchivalOp => "A089",
             PoktChains::CelestiaArchival => "A0CA",
             PoktChains::Celo => "0065",
             PoktChains::DFKchainSubnet => "03DF",
@@ -110,7 +197,9 @@ impl PoktChains {
             PoktChains::EthereumArchivalTrace => "0028",
             PoktChains::EthereumHighGas => "0062",
             PoktChains::Evmos => "0046",
+            //Experimental = "BE2A",
             PoktChains::Fantom => "0049",
+            PoktChains::FraxArchival => "A088",
             PoktChains::Fuse => "0005",
             PoktChains::FuseArchival => "000A",
             PoktChains::Gnosis => "0027",
@@ -137,6 +226,7 @@ impl PoktChains {
             PoktChains::OptimismArchival => "A053",
             PoktChains::Osmosis => "0054",
             PoktChains::Pocket => "0001",
+            PoktChains::PocketArchival => "A001",
             PoktChains::PolygonMatic => "0009",
             PoktChains::PolygonMaticArchival => "000B",
             PoktChains::PolygonMumbai => "000F",
@@ -151,20 +241,17 @@ impl PoktChains {
             PoktChains::Starknet => "0060",
             PoktChains::StarknetTestnet => "0061",
             PoktChains::Sui => "0076",
+            PoktChains::Taiko => "7A00",
+            PoktChains::TaikoHeklaTestnet => "7A10",
             PoktChains::Velas => "0067",
             PoktChains::VelasArchival => "0068",
             PoktChains::ZkSync => "0084",
+            PoktChains::PoktTestnetEthereumMock => "0007",
         }
     }
 
-    pub fn init_deployment_url() {
-        GATEWAY_URL
-            .set(dotenvy::var("GATEWAY_URL").unwrap().leak())
-            .unwrap()
-    }
-
     pub fn get_endpoint(&self) -> String {
-        format!("{}/relay/{}", GATEWAY_URL.get().unwrap(), Self::id(self))
+        format!("{}/relay/{}", *GATEWAY_URL, self.id())
     }
 
     pub async fn relay_pokt_transaction(
@@ -184,42 +271,43 @@ impl PoktChains {
 impl FromStr for PoktChains {
     type Err = RelayErrors;
     fn from_str(value: &str) -> Result<Self, Self::Err> {
-        match value {
-            "pokt_test" => Ok(PoktChains::PoktTestnetEthereumMock),
+        match value.to_lowercase().as_ref() {
             "arbitrum" => Ok(PoktChains::Arbitrum),
-            "amoy_a" => Ok(PoktChains::AmoyTestnetArchival),
-            "arbitrum_sepolia_a" => Ok(PoktChains::ArbitrumSepoliaArchival),
-            "optimism_sepolia_a" => Ok(PoktChains::OptimismSepoliaArchival),
+            "arbitrumsepoliaarchival" => Ok(PoktChains::ArbitrumSepoliaArchival),
+            "amoytestnetarchival" => Ok(PoktChains::AmoyTestnetArchival),
             "avax" => Ok(PoktChains::AVAX),
-            "avax_a" => Ok(PoktChains::AVAXArchival),
+            "avaxarchival" => Ok(PoktChains::AVAXArchival),
             "boba" => Ok(PoktChains::BOBA),
             "base" => Ok(PoktChains::Base),
-            "base_t" => Ok(PoktChains::BaseTestnet),
-            "bsc" => Ok(PoktChains::BinanceSmartChain),
-            "bsc_a" => Ok(PoktChains::BinanceSmartChainArchival),
-            "celestia_a" => Ok(PoktChains::CelestiaArchival),
+            "basetestnet" => Ok(PoktChains::BaseTestnet),
+            "binancesmartchain" => Ok(PoktChains::BinanceSmartChain),
+            "binancesmartchainarchival" => Ok(PoktChains::BinanceSmartChainArchival),
+            "bnbarchivalop" => Ok(PoktChains::BnbArchivalOp),
+            "celestiaarchival" => Ok(PoktChains::CelestiaArchival),
             "celo" => Ok(PoktChains::Celo),
-            "dfk" => Ok(PoktChains::DFKchainSubnet),
-            "doge" => Ok(PoktChains::Dogechain),
-            "eth_beacon" => Ok(PoktChains::EthereumBeacon),
+            "dfkchainsubnet" => Ok(PoktChains::DFKchainSubnet),
+            "dogechain" => Ok(PoktChains::Dogechain),
+            "ethereumbeacon" => Ok(PoktChains::EthereumBeacon),
             "ethereum" => Ok(PoktChains::Ethereum),
-            "ethereum_a" => Ok(PoktChains::EthereumArchival),
-            "eth_trace_a" => Ok(PoktChains::EthereumArchivalTrace),
-            "eth_high_gas" => Ok(PoktChains::EthereumHighGas),
+            "ethereumarchival" => Ok(PoktChains::EthereumArchival),
+            "ethereumarchivaltrace" => Ok(PoktChains::EthereumArchivalTrace),
+            "ethereumhighgas" => Ok(PoktChains::EthereumHighGas),
+            // "experimental"
             "evmos" => Ok(PoktChains::Evmos),
             "fantom" => Ok(PoktChains::Fantom),
+            "fraxarchival" => Ok(PoktChains::FraxArchival),
             "fuse" => Ok(PoktChains::Fuse),
-            "fuse_a" => Ok(PoktChains::FuseArchival),
+            "fusearchival" => Ok(PoktChains::FuseArchival),
             "gnosis" => Ok(PoktChains::Gnosis),
-            "gnosis_a" => Ok(PoktChains::GnosisArchival),
+            "gnosisarchival" => Ok(PoktChains::GnosisArchival),
             "goerli" => Ok(PoktChains::Goerli),
-            "goerli_a" => Ok(PoktChains::GoerliArchival),
-            "harmony_0" => Ok(PoktChains::HarmonyShard0),
-            "hol_beacon" => Ok(PoktChains::HoleskyBeacon),
-            "holesky" => Ok(PoktChains::HoleskyTestnet),
+            "goerliarchival" => Ok(PoktChains::GoerliArchival),
+            "harmonyshard0" => Ok(PoktChains::HarmonyShard0),
+            "holeskybeacon" => Ok(PoktChains::HoleskyBeacon),
+            "holeskytestnet" => Ok(PoktChains::HoleskyTestnet),
             "iotex" => Ok(PoktChains::IoTeX),
             "kava" => Ok(PoktChains::Kava),
-            "kava_a" => Ok(PoktChains::KavaArchival),
+            "kavaarchival" => Ok(PoktChains::KavaArchival),
             "klatyn" => Ok(PoktChains::Klatyn),
             "kovan" => Ok(PoktChains::Kovan),
             "meter" => Ok(PoktChains::Meter),
@@ -229,36 +317,35 @@ impl FromStr for PoktChains {
             "near" => Ok(PoktChains::Near),
             "okc" => Ok(PoktChains::OKC),
             "oasys" => Ok(PoktChains::Oasys),
-            "oasys_a" => Ok(PoktChains::OasysArchival),
+            "oasysarchival" => Ok(PoktChains::OasysArchival),
             "optimism" => Ok(PoktChains::Optimism),
-            "optimism_a" => Ok(PoktChains::OptimismArchival),
+            "optimismarchival" => Ok(PoktChains::OptimismArchival),
+            "optimismsepoliaarchival" => Ok(PoktChains::OptimismSepoliaArchival),
             "osmosis" => Ok(PoktChains::Osmosis),
             "pocket" => Ok(PoktChains::Pocket),
-            "matic" => Ok(PoktChains::PolygonMatic),
-            "matic_a" => Ok(PoktChains::PolygonMaticArchival),
-            "mumbai_t" => Ok(PoktChains::PolygonMumbai),
-            "polygon_zkevm" => Ok(PoktChains::PolygonZkEVM),
+            "pocketarchival" => Ok(PoktChains::PocketArchival),
+            "polygonmatic" => Ok(PoktChains::PolygonMatic),
+            "polygonmaticarchival" => Ok(PoktChains::PolygonMaticArchival),
+            "polygonmumbai" => Ok(PoktChains::PolygonMumbai),
+            "polygonzkevm" => Ok(PoktChains::PolygonZkEVM),
             "radix" => Ok(PoktChains::Radix),
             "scroll" => Ok(PoktChains::Scroll),
-            "scroll_t" => Ok(PoktChains::ScrollTestnet),
-            "sepolia_t" => Ok(PoktChains::SepoliaTestnet),
-            "sepolia_a" => Ok(PoktChains::SepoliaArchival),
+            "scrolltestnet" => Ok(PoktChains::ScrollTestnet),
+            "sepoliatestnet" => Ok(PoktChains::SepoliaTestnet),
+            "sepoliaarchival" => Ok(PoktChains::SepoliaArchival),
             "solana" => Ok(PoktChains::Solana),
-            "solana_custom" => Ok(PoktChains::SolanaCustom),
+            "solanacustom" => Ok(PoktChains::SolanaCustom),
             "starknet" => Ok(PoktChains::Starknet),
-            "starknet_t" => Ok(PoktChains::StarknetTestnet),
+            "starknettestnet" => Ok(PoktChains::StarknetTestnet),
             "sui" => Ok(PoktChains::Sui),
+            "taiko" => Ok(PoktChains::Taiko),
+            "taikoheklatestnet" => Ok(PoktChains::TaikoHeklaTestnet),
             "velas" => Ok(PoktChains::Velas),
-            "velas_a" => Ok(PoktChains::VelasArchival),
+            "velasarchival" => Ok(PoktChains::VelasArchival),
             "zksync" => Ok(PoktChains::ZkSync),
+            "pokttestnetethereummock" => Ok(PoktChains::PoktTestnetEthereumMock),
             _ => Err(RelayErrors::PoktChainIdParsingError),
         }
-    }
-}
-
-impl Relayer for PoktChains {
-    async fn relay_transaction(&self, body: &JsonRpcRequest) -> Result<String, RelayErrors> {
-        self.relay_pokt_transaction(body).await
     }
 }
 

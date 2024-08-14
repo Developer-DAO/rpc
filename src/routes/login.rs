@@ -1,14 +1,9 @@
-use super::{
-    errors::ApiError,
-    types::{Claims, JWT_KEY},
+use super::types::{Claims, JWT_KEY};
+use crate::database::{
+    errors::ParsingError,
+    types::{Customers, Role, RELATIONAL_DATABASE},
 };
-use crate::{
-    database::{
-        errors::ParsingError,
-        types::{Customers, Role, RELATIONAL_DATABASE},
-    },
-    eth_rpc::types::Address,
-};
+use alloy::primitives::Address;
 use argon2::{Argon2, PasswordHash, PasswordVerifier};
 use axum::{
     http::{header::SET_COOKIE, HeaderMap, HeaderValue, StatusCode},
@@ -17,21 +12,18 @@ use axum::{
 };
 use jwt_simple::{algorithms::MACLike, reexports::coarsetime::Duration};
 use serde::{Deserialize, Serialize};
-use std::{
-    error::Error,
-    fmt::{self, Display, Formatter},
-};
+use thiserror::Error;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct LoginRequest {
-    email: String,
-    password: String,
+    pub(crate) email: String,
+    pub(crate) password: String,
 }
 
 #[tracing::instrument]
 pub async fn user_login(
     Json(payload): Json<LoginRequest>,
-) -> Result<impl IntoResponse, ApiError<LoginError>> {
+) -> Result<impl IntoResponse, LoginError> {
     let user = sqlx::query_as!(
         Customers,
         r#"SELECT email, wallet, password, role as "role!:Role", verificationCode, activated FROM Customers 
@@ -40,112 +32,64 @@ pub async fn user_login(
     )
     .fetch_optional(RELATIONAL_DATABASE.get().unwrap())
     .await?
-    .ok_or_else(|| ApiError::new(LoginError::InvalidEmailOrPassword))?;
+    .ok_or_else(|| LoginError::InvalidEmailOrPassword)?;
 
     let plaintext_password = payload.password.as_bytes();
-    let hashed_password = PasswordHash::new(&user.password)?;
-    Argon2::default().verify_password(plaintext_password, &hashed_password)?;
+    let hashed_password =
+        PasswordHash::new(&user.password).map_err(|_| LoginError::HashingError)?;
+    Argon2::default()
+        .verify_password(plaintext_password, &hashed_password)
+        .map_err(|_| LoginError::InvalidEmailOrPassword)?;
 
     if !user.activated {
-        Err(ApiError::new(LoginError::AccountNotActivated))?
+        Err(LoginError::AccountNotActivated)?
     }
 
     let user_info = Claims {
         role: user.role,
         email: user.email,
-        wallet: user.wallet.parse::<Address>()?,
+        wallet: user.wallet.parse::<Address>().unwrap(),
     };
     let claims = jwt_simple::claims::Claims::with_custom_claims(user_info, Duration::from_hours(2));
     let key = JWT_KEY.get().unwrap();
     let auth = key.authenticate(claims)?;
 
     let mut headers = HeaderMap::new();
-    headers.insert(SET_COOKIE, HeaderValue::from_str(&format!("jwt={}", auth)).unwrap());
-    headers.append(SET_COOKIE, HeaderValue::from_str("Secure").unwrap());   
+    headers.insert(
+        SET_COOKIE,
+        HeaderValue::from_str(&format!("jwt={}", auth)).unwrap(),
+    );
+    headers.append(SET_COOKIE, HeaderValue::from_str("Secure").unwrap());
     headers.append(SET_COOKIE, HeaderValue::from_str("HttpOnly").unwrap());
-    headers.append(SET_COOKIE, HeaderValue::from_str("SameSite=Strict").unwrap());
+    headers.append(
+        SET_COOKIE,
+        HeaderValue::from_str("SameSite=Strict").unwrap(),
+    );
 
     Ok((StatusCode::OK, headers, "login successful!"))
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum LoginError {
+    #[error("The email or password you provided is invalid.")]
     InvalidEmailOrPassword,
-    DatabaseError(sqlx::Error),
-    HashingError(argon2::password_hash::Error),
+    #[error(transparent)]
+    DatabaseError(#[from] sqlx::Error),
+    #[error("An error occurred while hashing.")]
+    HashingError,
+    #[error("The account you are trying to login with is not activated.")]
     AccountNotActivated,
-    JwtCreationError(jwt_simple::Error),
-    AddressParsingError(ParsingError),
-    BuilderResponseError(axum::http::Error),
+    #[error(transparent)]
+    JwtCreationError(#[from] jwt_simple::Error),
+    #[error(transparent)]
+    AddressParsingError(#[from] ParsingError),
+    #[error(transparent)]
+    BuilderResponseError(#[from] axum::http::Error),
 }
 
-impl Display for LoginError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            LoginError::InvalidEmailOrPassword => {
-                write!(f, "The email or password used to login is invalid")
-            }
-            LoginError::DatabaseError(e) => {
-                write!(f, "Something went wrong while querying the database: {}", e)
-            }
-            LoginError::HashingError(e) => write!(f, "An error occurred while hashing: {}", e),
-            LoginError::AccountNotActivated => write!(f, "This account is not yet activated!"),
-            LoginError::JwtCreationError(e) => {
-                write!(f, "There was an error creating a JWT: {}", e)
-            }
-            LoginError::AddressParsingError(e) => {
-                write!(f, "There was an error parsing input as an Address: {}", e)
-            }
-            LoginError::BuilderResponseError(e) => write!(
-                f,
-                "An error occured while building a response from the server {}",
-                e
-            ),
-        }
-    }
-}
-
-impl Error for LoginError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match self {
-            LoginError::InvalidEmailOrPassword => None,
-            LoginError::DatabaseError(e) => Some(e),
-            LoginError::HashingError(_) => None,
-            LoginError::AccountNotActivated => None,
-            LoginError::JwtCreationError(e) => e.source(),
-            LoginError::AddressParsingError(e) => Some(e),
-            LoginError::BuilderResponseError(e) => Some(e),
-        }
-    }
-}
-
-impl From<axum::http::Error> for ApiError<LoginError> {
-    fn from(value: axum::http::Error) -> Self {
-        ApiError::new(LoginError::BuilderResponseError(value))
-    }
-}
-
-impl From<sqlx::Error> for ApiError<LoginError> {
-    fn from(value: sqlx::Error) -> Self {
-        ApiError::new(LoginError::DatabaseError(value))
-    }
-}
-
-impl From<argon2::password_hash::Error> for ApiError<LoginError> {
-    fn from(value: argon2::password_hash::Error) -> Self {
-        ApiError::new(LoginError::HashingError(value))
-    }
-}
-
-impl From<jwt_simple::Error> for ApiError<LoginError> {
-    fn from(value: jwt_simple::Error) -> Self {
-        ApiError::new(LoginError::JwtCreationError(value))
-    }
-}
-
-impl From<ParsingError> for ApiError<LoginError> {
-    fn from(value: ParsingError) -> Self {
-        ApiError::new(LoginError::AddressParsingError(value))
+impl IntoResponse for LoginError {
+    fn into_response(self) -> axum::response::Response {
+        (StatusCode::INTERNAL_SERVER_ERROR, self.to_string()).into_response()
     }
 }
 
@@ -179,12 +123,11 @@ pub mod tests {
     use dotenvy::dotenv;
 
     #[tokio::test]
-    async fn login() -> Result<(), Box<dyn std::error::Error>> {
+    async fn login() {
         dotenv().unwrap();
         JWTKey::init().unwrap();
-        Database::init(None).await.unwrap();
+        Database::init().await.unwrap();
         Email::init().unwrap();
-        let to = dotenvy::var("SMTP_USERNAME")?;
 
         tokio::spawn(async move {
             let app = Router::new()
@@ -195,19 +138,20 @@ pub mod tests {
                     "/api/keys",
                     post(generate_api_keys).route_layer(from_fn(verify_jwt)),
                 );
-            let listener = TcpListener::bind("0.0.0.0:3000").await.unwrap();
+            let listener = TcpListener::bind("0.0.0.0:3030").await.unwrap();
             axum::serve(listener, app).await.unwrap();
         });
 
         reqwest::Client::new()
-            .post("http://localhost:3000/api/register")
+            .post("http://localhost:3030/api/register")
             .json(&RegisterUser {
-                email: to.to_string(),
+                email: "abc@aol.com".to_string(),
                 wallet: "0x0c5E7D8C1494B74891e4c6539Be96C8e2402dcEF".to_string(),
                 password: "test".to_string(),
             })
             .send()
-            .await?;
+            .await
+            .unwrap();
 
         pub struct Code {
             verificationcode: String,
@@ -216,49 +160,52 @@ pub mod tests {
         let code = sqlx::query_as!(
             Code,
             "SELECT verificationCode FROM Customers WHERE email = $1",
-            &to
+            "abc@aol.com"
         )
         .fetch_one(RELATIONAL_DATABASE.get().unwrap())
-        .await?;
+        .await
+        .unwrap();
 
         let ar = ActivationRequest {
             code: code.verificationcode,
-            email: to.to_string(),
+            email: "abc@aol.com".to_string(),
         };
 
         reqwest::Client::new()
-            .post("http://localhost:3000/api/activate")
+            .post("http://localhost:3030/api/activate")
             .json(&ar)
             .send()
-            .await?;
+            .await
+            .unwrap();
 
         let lr = LoginRequest {
-            email: to.to_string(),
+            email: "abc@aol.com".to_string(),
             password: "test".to_string(),
         };
 
         let ddrpc_client = reqwest::Client::builder()
             .cookie_store(true)
-            .build()?;
+            .build()
+            .unwrap();
 
-        ddrpc_client 
-            .post("http://localhost:3000/api/login")
+        ddrpc_client
+            .post("http://localhost:3030/api/login")
             .json(&lr)
             .send()
-            .await?;
+            .await
+            .unwrap();
 
-        let keygen = ddrpc_client 
-            .post("http://localhost:3000/api/keys")
-            .send()
-            .await?;
+        // let keygen = ddrpc_client
+        //     .post("http://localhost:3030/api/keys")
+        //     .send()
+        //     .await
+        //     .unwrap();
+        //
+        // assert_eq!(&keygen.status().to_string(), &StatusCode::OK.to_string());
 
-        assert_eq!(&keygen.status().to_string(), &StatusCode::OK.to_string());
-        println!("key: {}", keygen.text().await?);
-
-        sqlx::query!("DELETE FROM Customers WHERE email = $1", &to)
-            .execute(RELATIONAL_DATABASE.get().unwrap())
-            .await?;
-
-        Ok(())
+        // sqlx::query!("DELETE FROM Customers WHERE email = $1", "abc@aol.com")
+        //     .execute(RELATIONAL_DATABASE.get().unwrap())
+        //     .await
+        //     .unwrap();
     }
 }

@@ -9,14 +9,8 @@ CREATE TABLE IF NOT EXISTS Customers (
     password VARCHAR(120) NOT NULL,
     role ROLE NOT NULL,
     verificationCode VARCHAR(10) NOT NULL,
+    credits BIGINT NOT NULL,
     activated bool NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS PaymentInfo (
-    customerEmail VARCHAR(255) PRIMARY KEY,
-    callCount BIGINT NOT NULL,
-    subscription PLAN NOT NULL,
-    planExpiration TIMESTAMPTZ NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS Api (
@@ -29,9 +23,17 @@ CREATE TABLE IF NOT EXISTS Payments (
     customerEmail VARCHAR(255) NOT NULL, 
     transactionHash VARCHAR(120) PRIMARY KEY,  -- Unique for each payment
     asset ASSET NOT NULL, 
-    amount BIGINT NOT NULL,
+    amount TEXT NOT NULL,
     chain CHAIN NOT NULL,
     date TIMESTAMPTZ NOT NULL
 );
 
+-- SELECT asset, amount, chain, date, transactionHash FROM Payments where customerEmail = $1 AND data > $2 
+
+-- registration (create account) -> select plan -> payments --tx_hash-> hits server -> confirm everything -> database + credit account 
+
 CREATE INDEX IF NOT EXISTS idx_customer_email ON Payments (customerEmail);
+
+-- pay as you go ** 
+-- min deposit ? 
+-- top up notifications 
