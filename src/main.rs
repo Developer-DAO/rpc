@@ -24,6 +24,7 @@ use axum::{
 };
 use database::types::Database;
 use dotenvy::dotenv;
+use routes::payment::process_ethereum_payment;
 use tokio::net::TcpListener;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::info;
@@ -58,14 +59,17 @@ async fn main() {
         .allow_methods([Method::POST])
         .allow_headers([header::CONTENT_TYPE]);
 
-    // let relayer = Router::new()
-    //     .route("/rpc/:chain/:api_key", post(route_call))
-    //     .route_layer(from_fn(validate_subscription_and_update_user_calls))
-    //     .layer(cors_rpc);
+    let relayer = Router::new()
+        .route("/rpc/:chain/:api_key", post(route_call))
+        .route_layer(from_fn(validate_subscription_and_update_user_calls))
+        .layer(cors_rpc);
 
     let api_keys = Router::new()
         .route("/api/keys", get(get_all_api_keys).post(generate_api_keys))
         .route("/api/keys/:key", delete(delete_key))
+        .route_layer(from_fn(verify_jwt));
+    let payments = Router::new()
+        .route("/api/pay/eth", post(process_ethereum_payment))
         .route_layer(from_fn(verify_jwt));
 
     let app = Router::new()
@@ -77,15 +81,12 @@ async fn main() {
         //       .route("/api/verifypayment/:emailaddress", get(verify_subscription))
         .route("/api/activate", post(activate_account))
         .route("/api/login", post(user_login))
-        .route(
-            "/api/pk_login",
-            get(pk_login_challenge).post(pk_login_response),
-        )
         .route("/api/recovery", post(update_password))
         .route("/api/recovery/:email", get(recover_password_email))
         .merge(api_keys)
-        .layer(cors_api);
-//        .merge(relayer);
+        .merge(payments)
+        .layer(cors_api)
+        .merge(relayer);
     info!("Initialized D_D RPC on 0.0.0.0:3000");
     let listener = TcpListener::bind("0.0.0.0:3000").await.unwrap();
     axum::serve(listener, app).await.unwrap();

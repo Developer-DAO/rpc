@@ -1,0 +1,17 @@
+{
+  "configurations": {
+    "<name>: Launch": {
+      "adapter": "CodeLLDB",
+      "configuration": {
+        "name": "<name>",
+        "type": "lldb",
+        "request": "launch",
+        "program": "${workspaceRoot}/target/debug/deps/dd_rpc-e8b47914113cbd98",
+        "cwd": "${workspaceRoot}",
+        "externalConsole": true,
+        "stopAtEntry": true,
+        "MIMode": "gdb"
+      }
+    }
+  }
+}
