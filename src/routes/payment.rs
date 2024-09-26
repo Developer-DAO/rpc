@@ -424,7 +424,6 @@ impl IntoResponse for PaymentError {
 
 #[cfg(test)]
 mod tests {
-    use std::{thread::sleep, time::Duration};
 
     use super::*;
     use alloy::{
@@ -465,271 +464,163 @@ mod tests {
             .unwrap();
         assert!(res >= 49000);
     }
-    // #[tokio::test]
-    // async fn test_eth_payment() {
-    //     // get eth provider
-    //     // send tx to WALLET and await SAFE
-    //     // process it
-    //     // profit
-    //
-    //     dotenv().unwrap();
-    //     JWTKey::init().unwrap();
-    //     Database::init().await.unwrap();
-    //     Email::init().unwrap();
-    //     let anvil = Anvil::new().block_time_f64(0.001).try_spawn().unwrap();
-    //     ETHEREUM_ENDPOINT.get_or_init(|| anvil.endpoint().leak());
-    //
-    //     // Set up signer from the first default Anvil account (Alice).
-    //     let signer: PrivateKeySigner = anvil.keys()[0].clone().into();
-    //     let wallet = EthereumWallet::from(signer.clone());
-    //
-    //     let rpc_url = anvil.endpoint().parse().unwrap();
-    //     let provider = ProviderBuilder::new()
-    //         .with_recommended_fillers()
-    //         .wallet(wallet)
-    //         .on_http(rpc_url);
-    //     // 1 ETH
-    //     let tx = provider
-    //         .transaction_request()
-    //         .with_value(U256::from(1000000000000000000u128))
-    //         .with_to(WALLET);
-    //
-    //     let tx_hash = provider
-    //         .send_transaction(tx)
-    //         .await
-    //         .unwrap()
-    //         .with_required_confirmations(24)
-    //         .watch()
-    //         .await
-    //         .unwrap();
-    //     println!("eth tx hash: {}", &tx_hash);
-    //     sleep(Duration::from_secs(2));
-    //
-    //     tokio::spawn(async move {
-    //         let app = Router::new()
-    //             .route("/api/register", post(register_user))
-    //             .route("/api/activate", post(activate_account))
-    //             .route(
-    //                 "/api/pay",
-    //                 post(process_ethereum_payment).route_layer(from_fn(verify_jwt)),
-    //             )
-    //             .route("/api/login", post(user_login))
-    //             .route(
-    //                 "/api/keys",
-    //                 post(generate_api_keys).route_layer(from_fn(verify_jwt)),
-    //             );
-    //         let listener = TcpListener::bind("0.0.0.0:3069").await.unwrap();
-    //         axum::serve(listener, app).await.unwrap();
-    //     });
-    //
-    //     reqwest::Client::new()
-    //         .post("http://localhost:3069/api/register")
-    //         .json(&RegisterUser {
-    //             email: "0xe3024@gmail.com".to_string(),
-    //             wallet: signer.address().to_string(),
-    //             password: "test".to_string(),
-    //         })
-    //         .send()
-    //         .await
-    //         .unwrap();
-    //
-    //     pub struct Code {
-    //         verificationcode: String,
-    //     }
-    //
-    //     let code = sqlx::query_as!(
-    //         Code,
-    //         "SELECT verificationCode FROM Customers WHERE email = $1",
-    //         "0xe3024@gmail.com"
-    //     )
-    //     .fetch_one(RELATIONAL_DATABASE.get().unwrap())
-    //     .await
-    //     .unwrap();
-    //
-    //     let ar = ActivationRequest {
-    //         code: code.verificationcode,
-    //         email: "0xe3024@gmail.com".to_string(),
-    //     };
-    //
-    //     reqwest::Client::new()
-    //         .post("http://localhost:3069/api/activate")
-    //         .json(&ar)
-    //         .send()
-    //         .await
-    //         .unwrap();
-    //
-    //     let lr = LoginRequest {
-    //         email: "0xe3024@gmail.com".to_string(),
-    //         password: "test".to_string(),
-    //     };
-    //
-    //     let ddrpc_client = reqwest::Client::builder()
-    //         .cookie_store(true)
-    //         .build()
-    //         .unwrap();
-    //
-    //     ddrpc_client
-    //         .post("http://localhost:3069/api/login")
-    //         .json(&lr)
-    //         .send()
-    //         .await
-    //         .unwrap();
-    //
-    //     let payment = EthereumPayment {
-    //         chain: Chain::Optimism,
-    //         hash: tx_hash.to_string(),
-    //     };
-    //
-    //     #[derive(Serialize, Deserialize, Debug)]
-    //     struct PaymentResponse {
-    //         purchased_credits: u64,
-    //     }
-    //
-    //     let res = ddrpc_client
-    //         .post("http://localhost:3069/api/pay")
-    //         .json(&payment)
-    //         .send()
-    //         .await
-    //         .unwrap()
-    //         .text()
-    //         .await
-    //         .unwrap();
-    //
-    //     println!("Credits from payment (eth): {:?}", res);
-    //     assert!(res.parse::<i64>().unwrap() > 0);
-    // }
 
-        #[tokio::test]
-        async fn test_usdc_payment_optimism() {
-            dotenv().unwrap();
-            JWTKey::init().unwrap();
-            Database::init().await.unwrap();
-            Email::init().unwrap();
-            let anvil = Anvil::new().block_time_f64(0.001).try_spawn().unwrap();
+    #[tokio::test]
+    async fn test_payment() {
+        dotenv().unwrap();
+        JWTKey::init().unwrap();
+        Database::init().await.unwrap();
+        Email::init().unwrap();
+        let anvil = Anvil::new().block_time_f64(0.001).try_spawn().unwrap();
 
-            ETHEREUM_ENDPOINT.get_or_init(|| anvil.endpoint().leak());
+        ETHEREUM_ENDPOINT.get_or_init(|| anvil.endpoint().leak());
 
-            let signer: PrivateKeySigner = anvil.keys()[0].clone().into();
-            let wallet = EthereumWallet::from(signer.clone());
+        let signer: PrivateKeySigner = anvil.keys()[0].clone().into();
+        let wallet = EthereumWallet::from(signer.clone());
 
-            let rpc_url = anvil.endpoint().parse().unwrap();
-            let provider = ProviderBuilder::new()
-                .with_recommended_fillers()
-                .wallet(wallet)
-                .on_http(rpc_url);
+        let rpc_url = anvil.endpoint().parse().unwrap();
+        let provider = ProviderBuilder::new()
+            .with_recommended_fillers()
+            .wallet(wallet)
+            .on_http(rpc_url);
 
-            let contract = ERC20::deploy(&provider).await.unwrap();
-            let addy = *contract.address();
-            println!("Contract address: {addy}");
-            TEST_TOKEN.get_or_init(|| {
-                let mut map = HashMap::new();
-                map.insert(addy, TokenDetails::new(18, Chain::Optimism, Asset::USDC));
-                map
-            });
-            let hash = contract
-                .transfer(WALLET, U256::from(1000u128 * (10u128.pow(18u32))))
-                .send()
-                .await
-                .unwrap()
-                .get_receipt()
-                .await
-                .unwrap()
-                .transaction_hash;
+        let eth_tx = provider
+            .transaction_request()
+            .with_value(U256::from(1000000000000000000u128))
+            .with_to(WALLET);
 
-            sleep(Duration::from_secs(2));
+        let eth_tx_hash = provider
+            .send_transaction(eth_tx)
+            .await
+            .unwrap()
+            .with_required_confirmations(24)
+            .watch()
+            .await
+            .unwrap();
+        println!("eth tx hash: {}", &eth_tx_hash);
 
-            tokio::spawn(async move {
-                let app = Router::new()
-                    .route("/api/register", post(register_user))
-                    .route("/api/activate", post(activate_account))
-                    .route(
-                        "/api/pay",
-                        post(process_ethereum_payment).route_layer(from_fn(verify_jwt)),
-                    )
-                    .route("/api/login", post(user_login))
-                    .route(
-                        "/api/keys",
-                        post(generate_api_keys).route_layer(from_fn(verify_jwt)),
-                    );
-                let listener = TcpListener::bind("0.0.0.0:3072").await.unwrap();
-                axum::serve(listener, app).await.unwrap();
-            });
+        let contract = ERC20::deploy(&provider).await.unwrap();
+        let addy = *contract.address();
+        println!("Contract address: {addy}");
+        TEST_TOKEN.get_or_init(|| {
+            let mut map = HashMap::new();
+            map.insert(addy, TokenDetails::new(18, Chain::Optimism, Asset::USDC));
+            map
+        });
+        let usdc_tx_hash = contract
+            .transfer(WALLET, U256::from(1000u128 * (10u128.pow(18u32))))
+            .send()
+            .await
+            .unwrap()
+            .get_receipt()
+            .await
+            .unwrap()
+            .transaction_hash;
 
-            reqwest::Client::new()
-                .post("http://localhost:3072/api/register")
-                .json(&RegisterUser {
-                    email: "0xe3024@gmail.com".to_string(),
-                    wallet: signer.address().to_string(),
-                    password: "test".to_string(),
-                })
-                .send()
-                .await
-                .unwrap();
+        tokio::spawn(async move {
+            let app = Router::new()
+                .route("/api/register", post(register_user))
+                .route("/api/activate", post(activate_account))
+                .route(
+                    "/api/pay",
+                    post(process_ethereum_payment).route_layer(from_fn(verify_jwt)),
+                )
+                .route("/api/login", post(user_login))
+                .route(
+                    "/api/keys",
+                    post(generate_api_keys).route_layer(from_fn(verify_jwt)),
+                );
+            let listener = TcpListener::bind("0.0.0.0:3072").await.unwrap();
+            axum::serve(listener, app).await.unwrap();
+        });
 
-            pub struct Code {
-                verificationcode: String,
-            }
-
-            let code = sqlx::query_as!(
-                Code,
-                "SELECT verificationCode FROM Customers WHERE email = $1",
-                "0xe3024@gmail.com"
-            )
-            .fetch_one(RELATIONAL_DATABASE.get().unwrap())
+        reqwest::Client::new()
+            .post("http://localhost:3072/api/register")
+            .json(&RegisterUser {
+                email: "0xe3024@gmail.com".to_string(),
+                wallet: signer.address().to_string(),
+                password: "test".to_string(),
+            })
+            .send()
             .await
             .unwrap();
 
-            let ar = ActivationRequest {
-                code: code.verificationcode,
-                email: "0xe3024@gmail.com".to_string(),
-            };
-
-            reqwest::Client::new()
-                .post("http://localhost:3072/api/activate")
-                .json(&ar)
-                .send()
-                .await
-                .unwrap();
-
-            let lr = LoginRequest {
-                email: "0xe3024@gmail.com".to_string(),
-                password: "test".to_string(),
-            };
-
-            let ddrpc_client = reqwest::Client::builder()
-                .cookie_store(true)
-                .build()
-                .unwrap();
-
-            ddrpc_client
-                .post("http://localhost:3072/api/login")
-                .json(&lr)
-                .send()
-                .await
-                .unwrap();
-
-            let payment = EthereumPayment {
-                chain: Chain::Optimism,
-                hash: hash.to_string(),
-            };
-            println!("{payment:?}");
-            #[derive(Serialize, Deserialize, Debug)]
-            struct PaymentResponse {
-                purchased_credits: u64,
-            }
-
-            let res = ddrpc_client
-                .post("http://localhost:3072/api/pay")
-                .json(&payment)
-                .send()
-                .await
-                .unwrap()
-                .text()
-                .await
-                .unwrap();
-
-            println!("Credits from payment: {:?}", res);
-
-            assert!(res.parse::<i64>().unwrap() > 0);
+        pub struct Code {
+            verificationcode: String,
         }
+
+        let code = sqlx::query_as!(
+            Code,
+            "SELECT verificationCode FROM Customers WHERE email = $1",
+            "0xe3024@gmail.com"
+        )
+        .fetch_one(RELATIONAL_DATABASE.get().unwrap())
+        .await
+        .unwrap();
+
+        let ar = ActivationRequest {
+            code: code.verificationcode,
+            email: "0xe3024@gmail.com".to_string(),
+        };
+
+        reqwest::Client::new()
+            .post("http://localhost:3072/api/activate")
+            .json(&ar)
+            .send()
+            .await
+            .unwrap();
+
+        let lr = LoginRequest {
+            email: "0xe3024@gmail.com".to_string(),
+            password: "test".to_string(),
+        };
+
+        let ddrpc_client = reqwest::Client::builder()
+            .cookie_store(true)
+            .build()
+            .unwrap();
+
+        ddrpc_client
+            .post("http://localhost:3072/api/login")
+            .json(&lr)
+            .send()
+            .await
+            .unwrap();
+
+        let usdc_payment = EthereumPayment {
+            chain: Chain::Optimism,
+            hash: usdc_tx_hash.to_string(),
+        };
+
+        let eth_payment = EthereumPayment {
+            chain: Chain::Optimism,
+            hash: eth_tx_hash.to_string(),
+        };
+
+        let res = ddrpc_client
+            .post("http://localhost:3072/api/pay")
+            .json(&usdc_payment)
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+
+        assert!(res.parse::<i64>().unwrap() > 0);
+
+        let res = ddrpc_client
+            .post("http://localhost:3072/api/pay")
+            .json(&eth_payment)
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+
+        println!("Credits from payment: {:?}", res);
+
+        assert!(res.parse::<i64>().unwrap() > 0);
+    }
 }
