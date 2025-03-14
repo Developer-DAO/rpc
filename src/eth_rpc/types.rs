@@ -1,41 +1,30 @@
-use std::sync::OnceLock;
+use std::sync::{LazyLock, OnceLock};
+pub static TESTING_ENDPOINT: OnceLock<&'static str> = OnceLock::new();
+pub static ETHEREUM_ENDPOINT: LazyLock<[InternalEndpoints; 1]> = LazyLock::new(|| {
+    [InternalEndpoints::Optimism(
+        dotenvy::var("ETHEREUM_ENDPOINT").unwrap().leak(),
+    )]
+});
 
-use alloy::node_bindings::Anvil;
-
-pub static ETHEREUM_ENDPOINT: OnceLock<&'static str> = OnceLock::new();
-
-#[derive(Debug, Clone, Copy)]
-pub struct Endpoints;
-
-pub enum EndpointType {
-    Testing,
-    Production,
+#[derive(Copy, Clone, Debug)]
+pub enum InternalEndpoints {
+    Optimism(&'static str),
+    Arbitrum(&'static str),
+    Polygon(&'static str),
+    Base(&'static str),
+    Anvil(&'static str),
 }
 
-impl Endpoints {
-    fn init(testing: EndpointType) {
-        match testing {
-            EndpointType::Testing => {
-                let endpoint = Anvil::new()
-                .block_time(1)
-                .try_spawn()
-                .unwrap()
-                .endpoint_url()
-                .to_string()
-                .leak();
-                ETHEREUM_ENDPOINT.get_or_init(|| endpoint);
-            },
-            EndpointType::Production => {
-                let endpoint = dotenvy::var("ETHEREUM_ENDPOINT").unwrap().leak();
-                ETHEREUM_ENDPOINT.get_or_init(|| endpoint);
-            }
+impl InternalEndpoints {
+    pub fn as_str(&self) -> &str {
+        match self {
+            InternalEndpoints::Optimism(o) => o,
+            InternalEndpoints::Arbitrum(a) => a,
+            InternalEndpoints::Polygon(p) => p,
+            InternalEndpoints::Base(b) => b,
+            InternalEndpoints::Anvil(a) => a,
         }
     }
-}
-
-#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq)]
-pub enum Chains {
-    Ethereum,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

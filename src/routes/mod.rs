@@ -3,7 +3,6 @@ pub mod api_keys;
 pub mod errors;
 pub mod login;
 pub mod payment;
-pub mod pk_login;
 pub mod recovery;
 pub mod register;
 pub mod relayer;

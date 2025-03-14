@@ -1,35 +1,39 @@
 use super::types::{Email, RegisterUser, SERVER_EMAIL};
-use crate::database::types::{Customers, Role, RELATIONAL_DATABASE};
+use crate::database::types::{Plan, RELATIONAL_DATABASE, Role};
 use argon2::{
-    password_hash::{rand_core::OsRng, SaltString},
     Argon2, PasswordHasher,
+    password_hash::{SaltString, rand_core::OsRng},
 };
-use axum::{http::StatusCode, response::IntoResponse, Json};
+use axum::{Json, http::StatusCode, response::IntoResponse};
 use lettre::{
-    address::AddressError,
-    message::{header::ContentType, Mailbox},
-    transport::smtp::{self, authentication::Credentials},
     Message, Transport,
+    address::AddressError,
+    message::{Mailbox, header::ContentType},
+    transport::smtp::{self, authentication::Credentials},
 };
-use rand::{rngs::ThreadRng, Rng};
+use rand::{Rng, rngs::ThreadRng};
 use thiserror::Error;
+// use time::OffsetDateTime;
 use tokio::{join, task::JoinError};
+
+pub struct Dedup {
+    pub email: String,
+}
 
 #[tracing::instrument]
 pub async fn register_user(
     Json(payload): Json<RegisterUser>,
 ) -> Result<impl IntoResponse, RegisterUserError> {
     let db_connection = RELATIONAL_DATABASE.get().unwrap();
-    let transaction = db_connection.begin().await?;
-    let account: Option<Customers> = sqlx::query_as!(
-        Customers,
-        r#"SELECT email, wallet, password, activated, verificationCode, role as "role!: Role" FROM Customers WHERE email = $1"#,
+    let exists: Option<Dedup> = sqlx::query_as!(
+        Dedup,
+        "SELECT email FROM Customers WHERE email = $1",
         &payload.email
     )
     .fetch_optional(db_connection)
     .await?;
 
-    if account.is_some() {
+    if exists.is_some() {
         Err(RegisterUserError::AlreadyRegistered)?
     }
 
@@ -68,31 +72,38 @@ pub async fn register_user(
             let _: smtp::response::Response = mailer.send(&email)?;
             Ok(())
         });
-
+    let transaction = db_connection.begin().await?;
     let db_write = tokio::spawn(async move {
-        let res = sqlx::query!(
-            "INSERT INTO Customers(email, wallet, role, password, verificationCode, credits, activated) 
-            VALUES ($1, $2, $3, $4, $5, $6, $7)",
+        sqlx::query!(
+            r#"INSERT INTO Customers(
+                email, 
+                password, 
+                role,
+                plan,
+                verificationcode, 
+                calls, 
+                leftovercalls, 
+                balance,
+                activated
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)"#,
             &payload.email,
-            payload.wallet,
-            Role::Normie as Role,
             hashed_pass,
+            Role::Normie as Role,
+            Plan::Free as Plan,
             verification_code.to_string(),
+            0,
+            0,
             0,
             false,
         )
         .execute(db_connection)
-        .await;
-
-        transaction.commit().await?;
-
-        res
+        .await
     });
-
     let (res_mail, res_db_write) = join!(send_mail, db_write);
     res_mail??;
     res_db_write??;
-
+    transaction.commit().await?;
     Ok((StatusCode::OK, "User was successfully registered").into_response())
 }
 
@@ -129,21 +140,21 @@ impl From<argon2::password_hash::Error> for RegisterUserError {
 #[cfg(test)]
 pub mod test {
     use crate::{
-        database::types::RELATIONAL_DATABASE, register_user, routes::types::RegisterUser, Database,
-        Email, JWTKey, TcpListener,
+        Database, Email, JWTKey, TcpListener, database::types::RELATIONAL_DATABASE, register_user,
+        routes::types::RegisterUser,
     };
     use argon2::{
-        password_hash::SaltString, Argon2, PasswordHash, PasswordHasher, PasswordVerifier,
+        Argon2, PasswordHash, PasswordHasher, PasswordVerifier, password_hash::SaltString,
     };
-    use axum::{routing::post, Router};
+    use axum::{Router, routing::post};
     use dotenvy::dotenv;
     use lettre::{
-        message::{header::ContentType, Mailbox},
-        transport::smtp::{self, authentication::Credentials},
         Message, Transport,
+        message::{Mailbox, header::ContentType},
+        transport::smtp::{self, authentication::Credentials},
     };
     use rand::rngs::OsRng;
-    use rand::{rngs::ThreadRng, Rng};
+    use rand::{Rng, rngs::ThreadRng};
 
     #[test]
     fn hash_test() {
@@ -177,21 +188,26 @@ pub mod test {
             axum::serve(listener, app).await.unwrap();
         });
 
-        reqwest::Client::new()
+        let res = reqwest::Client::new()
             .post("http://localhost:3000/api/register")
             .json(&RegisterUser {
                 email: to.to_string(),
-                wallet: "0x0c5E7D8C1494B74891e4c6539Be96C8e2402dcEF".to_string(),
                 password: "test".to_string(),
             })
             .send()
             .await
+            .unwrap()
+            .text()
+            .await
+            .inspect(|e| println!("{e}"))
             .unwrap();
 
-        // sqlx::query!("DELETE FROM Customers WHERE email = $1", &to)
-        //     .execute(RELATIONAL_DATABASE.get().unwrap())
-        //     .await
-        //     .unwrap();
+        assert_eq!(&res, "User was successfully registered");
+
+        sqlx::query!("DELETE FROM Customers WHERE email = $1", &to)
+            .execute(RELATIONAL_DATABASE.get().unwrap())
+            .await
+            .unwrap();
     }
 
     #[tokio::test]

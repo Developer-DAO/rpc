@@ -1,6 +1,6 @@
 use crate::database::types::RELATIONAL_DATABASE;
-use axum::{http::StatusCode, response::IntoResponse, Json};
-use rand::{rngs::ThreadRng, Rng};
+use axum::{Json, http::StatusCode, response::IntoResponse};
+use rand::{Rng, rngs::ThreadRng};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 

@@ -1,15 +1,18 @@
-use crate::database::types::RELATIONAL_DATABASE;
+use crate::database::types::{Plan, RELATIONAL_DATABASE};
 use axum::{
     extract::{Path, Request},
     middleware::Next,
     response::IntoResponse,
 };
 use thiserror::Error;
+use time::OffsetDateTime;
 use tokio::join;
 
 pub struct Credits {
-    credits: i64,
+    calls: i64,
     email: String,
+    plan: Plan,
+    planexpiration: Option<OffsetDateTime>,
 }
 
 pub async fn validate_subscription_and_update_user_calls(
@@ -20,9 +23,9 @@ pub async fn validate_subscription_and_update_user_calls(
     let db_connection = RELATIONAL_DATABASE.get().unwrap();
     let sub_info: Credits = sqlx::query_as!(
         Credits,
-        "SELECT credits, email
+        r#"SELECT planexpiration, calls, email, plan as "plan!: Plan"
         FROM Customers
-        WHERE Customers.email = (SELECT customerEmail FROM Api WHERE apiKey = $1)",
+        WHERE Customers.email = (SELECT customerEmail FROM Api WHERE apiKey = $1)"#,
         key.get(1).ok_or_else(|| RpcAuthErrors::InvalidApiKey)?
     )
     .fetch_optional(db_connection)
@@ -30,14 +33,26 @@ pub async fn validate_subscription_and_update_user_calls(
     .ok_or_else(|| RpcAuthErrors::InvalidApiKey)?;
 
     // check callcount
-    if sub_info.credits == 0 {
+    if sub_info.calls >= sub_info.plan.get_plan_limit() as i64 {
         Err(RpcAuthErrors::OutOfCredits)?
+    }
+
+    match (sub_info.plan, sub_info.planexpiration) {
+        (Plan::Free, _) => {}
+        (_, Some(expiry)) => {
+            if expiry <= OffsetDateTime::now_utc() {
+                Err(RpcAuthErrors::PlanExpired)?
+            }
+        }
+        (_, None) => {
+            // this shouldn't happen
+        }
     }
 
     let inc = tokio::spawn(async move {
         sqlx::query!(
             // atomically decriment the credits field
-            "UPDATE Customers SET credits = credits - 1 WHERE email = $1",
+            "UPDATE Customers SET calls = calls + 1 WHERE email = $1",
             sub_info.email,
         )
         .execute(db_connection)
@@ -58,8 +73,10 @@ pub enum RpcAuthErrors {
     InvalidApiKey,
     #[error(transparent)]
     DatabaseError(#[from] sqlx::Error),
-    #[error("You have ran out of credits. Please buy more if you love our service!")]
+    #[error("You have ran out of credits. Please resubscribe if you love our service!")]
     OutOfCredits,
+    #[error("Plan expired. Please resubscribe if you love our service!")]
+    PlanExpired,
 }
 
 impl IntoResponse for RpcAuthErrors {

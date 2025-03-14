@@ -7,7 +7,6 @@ use crate::routes::{
     activate::activate_account,
     api_keys::{delete_key, generate_api_keys, get_all_api_keys},
     login::user_login,
-    pk_login::{pk_login_challenge, pk_login_response},
     recovery::{recover_password_email, update_password},
     register::register_user,
     relayer::router::route_call,
@@ -16,11 +15,11 @@ use axum::http::HeaderValue;
 use axum::http::Method;
 use axum::routing::delete;
 use axum::{
-    http::{header, StatusCode},
+    Router,
+    http::{StatusCode, header},
     middleware::from_fn,
     response::IntoResponse,
     routing::{get, post},
-    Router,
 };
 use database::types::Database;
 use dotenvy::dotenv;

@@ -1,16 +1,16 @@
 use crate::database::types::RELATIONAL_DATABASE;
 use argon2::{
-    password_hash::{rand_core::OsRng, SaltString},
     Argon2, PasswordHasher,
+    password_hash::{SaltString, rand_core::OsRng},
 };
-use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
+use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
 use lettre::{
-    address::AddressError,
-    message::{header::ContentType, Mailbox},
-    transport::smtp::authentication::Credentials,
     Message, SmtpTransport, Transport,
+    address::AddressError,
+    message::{Mailbox, header::ContentType},
+    transport::smtp::authentication::Credentials,
 };
-use rand::{rngs::ThreadRng, Rng};
+use rand::{Rng, rngs::ThreadRng};
 use serde::{Deserialize, Serialize};
 use std::num::ParseIntError;
 use thiserror::Error;

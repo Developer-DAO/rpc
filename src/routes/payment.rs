@@ -1,28 +1,25 @@
 use super::types::Claims;
 use crate::database::types::{Asset, Chain};
 use crate::database::types::{Payments, RELATIONAL_DATABASE};
-use crate::eth_rpc::types::ETHEREUM_ENDPOINT;
+use crate::eth_rpc::types::{ETHEREUM_ENDPOINT, TESTING_ENDPOINT};
 use alloy::eips::BlockId;
 use alloy::primitives::ruint::ParseError;
-use alloy::primitives::utils::{parse_units, UnitsError};
+use alloy::primitives::utils::{UnitsError, parse_units};
 use alloy::rpc::types::{BlockTransactionsKind, Transaction, TransactionReceipt};
 use alloy::transports::{RpcError, TransportErrorKind};
 use alloy::{
     network::ReceiptResponse,
-    primitives::{
-        address, hex,
-        utils::{format_ether, format_units},
-        Address, Bytes, FixedBytes, U256,
-    },
+    primitives::{Address, Bytes, FixedBytes, U256, address, hex, utils::format_units},
     providers::{Provider, ProviderBuilder},
     sol,
     sol_types::SolCall,
 };
-use axum::http::StatusCode;
 use axum::Extension;
-use axum::{response::IntoResponse, Json};
+use axum::http::StatusCode;
+use axum::{Json, response::IntoResponse};
 use jwt_simple::claims::JWTClaims;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use sqlx::types::time::OffsetDateTime;
 use std::num::ParseFloatError;
 use std::sync::OnceLock;
@@ -41,6 +38,18 @@ use tracing::info;
 //     "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
 //     "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
 // ];
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct PriceData {
+    data: AssetData,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct AssetData {
+    pub amount: String,
+    pub base: String,
+    pub currency: String,
+}
 
 static WALLET: Address = address!("0b2C639c533813f4Aa9D7837CAf62653d097Ff85");
 
@@ -85,7 +94,6 @@ static TOKENS: LazyLock<HashMap<Address, TokenDetails>> = LazyLock::new(|| {
         address!("0b2C639c533813f4Aa9D7837CAf62653d097Ff85"),
         TokenDetails::new(6, Chain::Optimism, Asset::USDC),
     );
-
     map
 });
 
@@ -112,6 +120,9 @@ pub enum Transfer {
     TransferFrom(ERC20::transferFromCall),
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+pub struct Months(pub u8);
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct EthereumPayment {
     pub chain: Chain,
@@ -122,9 +133,21 @@ pub async fn process_ethereum_payment(
     Extension(jwt): Extension<JWTClaims<Claims>>,
     Json(payload): Json<EthereumPayment>,
 ) -> Result<impl IntoResponse, PaymentError> {
-    // todo: fetch endpoint based on chain specified
-
-    let endpoint = ETHEREUM_ENDPOINT.get().unwrap();
+    let endpoint = if cfg!(test) {
+        TESTING_ENDPOINT.get().unwrap()
+    } else {
+        ETHEREUM_ENDPOINT
+            .iter()
+            .find(|e| match (e, payload.chain) {
+                (crate::eth_rpc::types::InternalEndpoints::Optimism(_), Chain::Optimism) => true,
+                (crate::eth_rpc::types::InternalEndpoints::Arbitrum(_), Chain::Arbitrum) => true,
+                (crate::eth_rpc::types::InternalEndpoints::Polygon(_), Chain::Polygon) => true,
+                (crate::eth_rpc::types::InternalEndpoints::Base(_), Chain::Base) => true,
+                _ => false,
+            })
+            .ok_or_else(|| PaymentError::InvalidNetwork)?
+            .as_str()
+    };
 
     let hash = hex::decode(&payload.hash)?;
     let mut fixed = [0u8; 32];
@@ -184,35 +207,34 @@ pub async fn process_ethereum_payment(
 
     let res: &Transaction = &res??;
 
-    let credits = match res.input == Bytes::new() {
+    // todo: uncomment once SIWE is implemented
+    // assert!(jwt.custom.wallet.is_some_and(|e| res.from == e));
+
+    let payment: Payments = match res.input == Bytes::new() {
         // ether
         true => {
-            if res.from != jwt.custom.wallet {
-                Err(PaymentError::AddressMismatch)?
-            }
-            let to = res.to.ok_or_else(|| PaymentError::NoDestination)?;
-            if to != WALLET {
-                Err(PaymentError::IncorrectRecipient)?
-            }
-            let credits = calculate_credits_eth(res.value).await?;
-            info!(
-                "Num of credits purchased: {} for {} ETH",
-                credits,
-                format_ether(res.value)
-            );
-
-            credit_account(&jwt.custom.email, credits).await?;
-            let payment = Payments {
-                customer_email: jwt.custom.email,
-                transaction_hash: hex::encode(hash),
-                asset: Asset::Ether,
-                amount: format_ether(res.value),
-                chain: payload.chain,
-                date: OffsetDateTime::now_utc(),
-            };
-
-            insert_payment(&payment).await?;
-            credits
+            Err(PaymentError::UnsupportedToken)?
+            // if res.from != jwt.custom.wallet {
+            //     Err(PaymentError::AddressMismatch)?
+            // }
+            // let to = res.to.ok_or_else(|| PaymentError::NoDestination)?;
+            // if to != WALLET {
+            //     Err(PaymentError::IncorrectRecipient)?
+            // }
+            // let value: U256 = calculate_eth_value(res.value).await?;
+            // info!("USD amount paid: {}", value,);
+            // let usd_value: String = format_units(value, 18)?;
+            // let usd_value = (usd_value.parse::<f64>()? * 100.0) as i64;
+            //     Payments {
+            //         customer_email: jwt.custom.email,
+            //         transaction_hash: hex::encode(hash),
+            //         asset: Asset::Ether,
+            //         amount: format_ether(res.value),
+            //         chain: payload.chain,
+            //         date: OffsetDateTime::now_utc(),
+            //         usd_value,
+            //         decimals: 18
+            //     }
         }
         // token handling
         false => {
@@ -226,15 +248,16 @@ pub async fn process_ethereum_payment(
             let token_address = res.to.ok_or_else(|| PaymentError::UnsupportedToken)?;
             let (amount, to) = match decoded {
                 Transfer::Transfer(tx) => (tx.amount, tx.to),
-                Transfer::TransferFrom(tx) => {
-                    if tx.from != jwt.custom.wallet {
-                        Err(PaymentError::AddressMismatch)?
+                Transfer::TransferFrom(tx) => match jwt.custom.wallet {
+                    Some(wallet) => {
+                        if tx.from != wallet {
+                            Err(PaymentError::AddressMismatch)?
+                        }
+                        (tx.amount, tx.to)
                     }
-                    (tx.amount, tx.to)
-                }
+                    None => Err(PaymentError::AddressMismatch)?,
+                },
             };
-            println!("parsed abi successfully");
-
             if to != WALLET {
                 Err(PaymentError::IncorrectRecipient)?
             }
@@ -250,78 +273,63 @@ pub async fn process_ethereum_payment(
                     .get(&token_address)
                     .ok_or_else(|| PaymentError::UnsupportedToken)?
             };
+
+            match token.asset {
+                Asset::Ether => Err(PaymentError::UnsupportedToken)?,
+                Asset::USDC => {}
+            }
+
             println!("Calculating credits from token ...");
-            let credits = calculate_credits_token(token.asset, amount, token.decimals).await?;
+            let value = calculate_token_value(token.asset, amount, token.decimals).await?;
+            println!("Raw Value {}", value);
 
-            info!(
-                "Num of credits purchased: {} for {}",
-                credits,
-                format_ether(amount)
-            );
+            info!("USD amount paid: {}", value,);
 
-            credit_account(&jwt.custom.email, credits).await?;
-            let payment = Payments {
+            let usd_value: String = format_units(value, token.decimals)?;
+            println!("USD_VALUE {}", usd_value);
+            let usd_value = (usd_value.parse::<f64>()? * 100.0) as i64;
+
+            Payments {
                 customer_email: jwt.custom.email,
                 transaction_hash: hex::encode(hash),
                 asset: token.asset,
-                amount: res.value.to_string(),
+                amount: amount.to_string(),
                 chain: payload.chain,
                 date: OffsetDateTime::now_utc(),
-            };
-
-            insert_payment(&payment).await?;
-
-            credits
+                decimals: token.decimals as i8,
+                usd_value,
+            }
         }
     };
+
+    credit_account(&payment.customer_email, payment.usd_value).await?;
+    insert_payment(&payment).await?;
     println!("End of function");
-    Ok((StatusCode::OK, credits.to_string()).into_response())
+    Ok((
+        StatusCode::OK,
+        json!({"paid": payment.usd_value}).to_string(),
+    )
+        .into_response())
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct PriceData {
-    data: AssetData,
-}
+// async fn calculate_eth_value(eth_amount: U256) -> Result<U256, PaymentError> {
+//     let price: PriceData = reqwest::Client::new()
+//         .get("https://api.coinbase.com/v2/prices/ETH-USD/spot")
+//         .send()
+//         .await?
+//         .json::<PriceData>()
+//         .await?;
+//     println!("USD Price of Assets as string: {}", price.data.amount);
+//     let usd_price_ether_repr = parse_units(&price.data.amount, 18)?.get_absolute();
+//     let value = (usd_price_ether_repr * eth_amount) / U256::from(10).pow(U256::from(18));
+//     Ok(value)
+// }
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct AssetData {
-    pub amount: String,
-    pub base: String,
-    pub currency: String,
-}
-
-async fn calculate_credits_eth(eth_amount: U256) -> Result<i64, PaymentError> {
-    let price: PriceData = reqwest::Client::new()
-        .get("https://api.coinbase.com/v2/prices/ETH-USD/spot")
-        .send()
-        .await?
-        .json::<PriceData>()
-        .await?;
-    println!("USD Price of Assets as string: {}", price.data.amount);
-    // to U256 in Fixed Point representation
-    let usd_price: U256 = parse_units(&price.data.amount, 18)?.into();
-    let usd_amount = usd_price * eth_amount;
-    println!("USD Price of Assets U256: {}", &usd_amount);
-    println!(
-        "USD Price of Assets Parsed: {}",
-        format_ether(usd_amount / U256::from(10).pow(U256::from(18)))
-    );
-    // 0.001 as WEI
-    let credits = usd_amount / U256::from(2000000000000u64);
-    let credits_parsed = format_units(credits, "ether")?;
-    println!("Credits Parsed: {}", credits_parsed);
-
-    // alters pricing
-    println!("Credits: {}", credits);
-    let creds = format_ether(credits).parse::<f64>()?.round() as i64;
-    Ok(creds)
-}
-
-async fn calculate_credits_token(
+async fn calculate_token_value(
     asset: Asset,
     amount: U256,
     decimals: u8,
-) -> Result<i64, PaymentError> {
+) -> Result<U256, PaymentError> {
     let price: PriceData = reqwest::Client::new()
         .get(format!(
             "https://api.coinbase.com/v2/prices/{}-USD/spot",
@@ -331,31 +339,26 @@ async fn calculate_credits_token(
         .await?
         .json::<PriceData>()
         .await?;
-
-    let usd_price: U256 = parse_units(&price.data.amount, decimals)?.into();
-    println!("Token usd price: {usd_price}");
-    let usd_amount = usd_price * amount;
-
-    // 0.001 as wei
-    let credits = usd_amount / U256::from(2000000000000u64);
-    //    let credits_parsed = format_units(credits, units)?;
-    let creds = format_units(credits, decimals)?.parse::<f64>()?.round() as i64;
-    println!("Parsed float: {creds}");
-    Ok(creds)
+    let usd_price_repr = parse_units(&price.data.amount, decimals)?.get_absolute();
+    let value = (usd_price_repr * amount) / U256::from(10).pow(U256::from(decimals));
+    Ok(value)
 }
 
 async fn insert_payment(payment: &Payments) -> Result<(), PaymentError> {
     // append only -- isolated
     let db_connection = RELATIONAL_DATABASE.get().unwrap();
     sqlx::query!(
-        "INSERT INTO Payments(customerEmail, transactionHash, asset, amount, chain, date) 
-            VALUES ($1, $2, $3, $4, $5, $6)",
+        "INSERT INTO Payments(customerEmail, transactionHash, asset, amount, chain, date, decimals, usdValue) 
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
         payment.customer_email,
         payment.transaction_hash,
         payment.asset as crate::database::types::Asset,
         payment.amount,
         payment.chain as crate::database::types::Chain,
         payment.date,
+        payment.decimals as i32,
+        payment.usd_value
+        
     )
     .execute(db_connection)
     .await?;
@@ -363,12 +366,13 @@ async fn insert_payment(payment: &Payments) -> Result<(), PaymentError> {
 }
 
 async fn credit_account(email: &str, amount: i64) -> Result<(), PaymentError> {
+    // only updates account balance based on transaction
     let db_connection = RELATIONAL_DATABASE.get().unwrap();
     let transaction = db_connection.begin().await?;
     sqlx::query!(
-        "UPDATE Customers SET credits = $1 where email = $2",
+        "UPDATE Customers SET balance = balance + $1 where email = $2",
         amount,
-        email
+        email,
     )
     .execute(db_connection)
     .await?;
@@ -414,6 +418,12 @@ pub enum PaymentError {
     ParseFloatError(#[from] ParseFloatError),
     #[error("Transaction not found")]
     TxNotFound,
+    #[error("Insufficient payment for plan and duration specified in call")]
+    InsufficientPayment,
+    #[error("Invalid duration, must be greater than 0")]
+    InvalidDuration,
+    #[error("Network is not currently supported")]
+    InvalidNetwork,
 }
 
 impl IntoResponse for PaymentError {
@@ -424,80 +434,60 @@ impl IntoResponse for PaymentError {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
 
     use super::*;
-    use alloy::{
-        network::{EthereumWallet, TransactionBuilder},
-        node_bindings::Anvil,
-        signers::local::PrivateKeySigner,
-    };
+    use alloy::{network::EthereumWallet, node_bindings::Anvil, signers::local::PrivateKeySigner};
 
     use crate::{
+        Database, Email, JWTKey, TcpListener,
         database::types::RELATIONAL_DATABASE,
         middleware::jwt_auth::verify_jwt,
         register_user,
         routes::{
-            activate::{activate_account, ActivationRequest},
+            activate::{ActivationRequest, activate_account},
             api_keys::generate_api_keys,
             login::LoginRequest,
             types::RegisterUser,
         },
-        user_login, Database, Email, JWTKey, TcpListener,
+        user_login,
     };
-    use axum::{middleware::from_fn, routing::post, Router};
+    use axum::{Router, middleware::from_fn, routing::post};
     use dotenvy::dotenv;
 
     #[tokio::test]
-    async fn test_eth_credit() {
-        // 2 ETH
-        let res = calculate_credits_eth(U256::from(2000000000000000000u64))
-            .await
-            .unwrap();
-        assert!(res >= 3_000_000);
-    }
-
-    #[tokio::test]
-    async fn test_token_credit() {
-        // 2 ETH
-        let res = calculate_credits_token(Asset::USDC, U256::from(50000000000000000000u128), 6)
-            .await
-            .unwrap();
-        assert!(res >= 49000);
-    }
-
-    #[tokio::test]
     async fn test_payment() {
+        // todo: make test not flaky by deleting inserted data
+        // in pg
+
         dotenv().unwrap();
         JWTKey::init().unwrap();
         Database::init().await.unwrap();
         Email::init().unwrap();
         let anvil = Anvil::new().block_time_f64(0.001).try_spawn().unwrap();
-
-        ETHEREUM_ENDPOINT.get_or_init(|| anvil.endpoint().leak());
-
         let signer: PrivateKeySigner = anvil.keys()[0].clone().into();
         let wallet = EthereumWallet::from(signer.clone());
-
         let rpc_url = anvil.endpoint().parse().unwrap();
+        TESTING_ENDPOINT.get_or_init(|| anvil.endpoint().leak());
         let provider = ProviderBuilder::new()
             .with_recommended_fillers()
             .wallet(wallet)
             .on_http(rpc_url);
 
-        let eth_tx = provider
-            .transaction_request()
-            .with_value(U256::from(1000000000000000000u128))
-            .with_to(WALLET);
-
-        let eth_tx_hash = provider
-            .send_transaction(eth_tx)
-            .await
-            .unwrap()
-            .with_required_confirmations(24)
-            .watch()
-            .await
-            .unwrap();
-        println!("eth tx hash: {}", &eth_tx_hash);
+        // let eth_tx = provider
+        //     .transaction_request()
+        //     .with_value(U256::from(1000000000000000000u128))
+        //     .with_to(WALLET);
+        //
+        // let eth_tx_hash = provider
+        //     .send_transaction(eth_tx)
+        //     .await
+        //     .unwrap()
+        //     .with_required_confirmations(24)
+        //     .watch()
+        //     .await
+        //     .unwrap();
+        // println!("eth tx hash: {}", &eth_tx_hash);
 
         let contract = ERC20::deploy(&provider).await.unwrap();
         let addy = *contract.address();
@@ -517,6 +507,8 @@ mod tests {
             .unwrap()
             .transaction_hash;
 
+        std::thread::sleep(Duration::new(1, 0));
+
         tokio::spawn(async move {
             let app = Router::new()
                 .route("/api/register", post(register_user))
@@ -534,16 +526,20 @@ mod tests {
             axum::serve(listener, app).await.unwrap();
         });
 
-        reqwest::Client::new()
+        let reg_res = reqwest::Client::new()
             .post("http://localhost:3072/api/register")
             .json(&RegisterUser {
                 email: "0xe3024@gmail.com".to_string(),
-                wallet: signer.address().to_string(),
                 password: "test".to_string(),
             })
             .send()
             .await
+            .unwrap()
+            .text()
+            .await
             .unwrap();
+
+        // assert_eq!(reg_res, "User was successfully registered");
 
         pub struct Code {
             verificationcode: String,
@@ -588,14 +584,14 @@ mod tests {
             .unwrap();
 
         let usdc_payment = EthereumPayment {
-            chain: Chain::Optimism,
+            chain: Chain::Anvil,
             hash: usdc_tx_hash.to_string(),
         };
 
-        let eth_payment = EthereumPayment {
-            chain: Chain::Optimism,
-            hash: eth_tx_hash.to_string(),
-        };
+        // let eth_payment = EthereumPayment {
+        //     chain: Chain::Anvil,
+        //     hash: eth_tx_hash.to_string(),
+        // };
 
         let res = ddrpc_client
             .post("http://localhost:3072/api/pay")
@@ -603,24 +599,24 @@ mod tests {
             .send()
             .await
             .unwrap()
-            .text()
+            .json::<serde_json::Value>()
             .await
             .unwrap();
+        println!("{res}");
+        assert_eq!(res["paid"], 100000);
 
-        assert!(res.parse::<i64>().unwrap() > 0);
-
-        let res = ddrpc_client
-            .post("http://localhost:3072/api/pay")
-            .json(&eth_payment)
-            .send()
-            .await
-            .unwrap()
-            .text()
-            .await
-            .unwrap();
-
-        println!("Credits from payment: {:?}", res);
-
-        assert!(res.parse::<i64>().unwrap() > 0);
+        // let res = ddrpc_client
+        //     .post("http://localhost:3072/api/pay")
+        //     .json(&eth_payment)
+        //     .send()
+        //     .await
+        //     .unwrap()
+        //     .text()
+        //     .await
+        //     .unwrap();
+        //
+        // println!("Credits from payment: {:?}", res);
+        //
+        // assert!(res.parse::<i64>().unwrap() > 0);
     }
 }

@@ -1,4 +1,4 @@
-use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
+use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
 
 use super::types::RelayErrors;
 use crate::{json_rpc::types::JsonRpcRequest, routes::relayer::types::PoktChains};

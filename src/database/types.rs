@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use sqlx::{migrate, postgres::PgPoolOptions, FromRow, Pool, Postgres};
+use sqlx::{FromRow, Pool, Postgres, migrate, postgres::PgPoolOptions};
 use std::fmt::Display;
 use std::str::FromStr;
 use std::sync::OnceLock;
@@ -28,7 +28,7 @@ impl Database {
 #[derive(FromRow, Debug)]
 pub struct Customers {
     pub email: String,
-    pub wallet: String,
+    pub wallet: Option<String>,
     pub role: Role,
     pub password: String,
     pub verificationcode: String,
@@ -51,6 +51,8 @@ pub struct Payments {
     pub amount: String,
     pub chain: Chain,
     pub date: OffsetDateTime,
+    pub usd_value: i64,
+    pub decimals: i8,
 }
 
 #[derive(FromRow, Debug, Serialize, Deserialize)]
@@ -59,12 +61,13 @@ pub struct Api {
     pub apikey: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, sqlx::Type, Serialize, Deserialize)]
+#[sqlx(type_name = "PLAN", rename_all = "lowercase")]
 pub enum Plan {
-    None,
-    Based,
-    Premier,
-    Gigachad,
+    Free,
+    Tier1,
+    Tier2,
+    Tier3,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, sqlx::Type)]
@@ -74,6 +77,7 @@ pub enum Chain {
     Polygon,
     Arbitrum,
     Base,
+    Anvil,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, sqlx::Type)]
@@ -86,10 +90,10 @@ pub enum Asset {
 impl Display for Plan {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Plan::None => write!(f, "none"),
-            Plan::Based => write!(f, "based"),
-            Plan::Premier => write!(f, "premier"),
-            Plan::Gigachad => write!(f, "gigachad"),
+            Plan::Free => write!(f, "free"),
+            Plan::Tier1 => write!(f, "tier1"),
+            Plan::Tier2 => write!(f, "tier2"),
+            Plan::Tier3 => write!(f, "tier3"),
         }
     }
 }
@@ -99,13 +103,51 @@ impl FromStr for Plan {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let plan = match s {
-            "based" => Plan::Based,
-            "premier" => Plan::Premier,
-            "gigachad" => Plan::Gigachad,
+            "tier1" => Plan::Tier1,
+            "premier" => Plan::Tier2,
+            "tier3" => Plan::Tier3,
             _ => Err(ParsingError(s.to_string(), "Plan"))?,
         };
 
         Ok(plan)
+    }
+}
+
+impl Plan {
+    pub const FREE_TIER_LIMIT: u32 = 3_100_000;
+    // Free Tier: 3.1M requests per month
+    pub const TIER_ONE: u32 = 30_000_000;
+    pub const TIER_ONE_COST: f64 = 50.0;
+    // Tier 1: 30M requests per month
+    // price: $50/mo
+    pub const TIER_TWO: u32 = 125_000_000;
+    pub const TIER_TWO_COST: f64 = 20.0;
+    // Tier 2: 125M requests per month
+    // price: $200/mo
+    pub const TIER_THREE: u32 = 500_000_000;
+    pub const TIER_THREE_COST: f64 = 875.0;
+    // Tier 3: 500M requests per month
+    // price: $875/mo
+
+    pub fn get_cost(&self) -> f64 {
+        match self {
+            Plan::Free => 0.0,
+            // $50
+            Plan::Tier1 => Self::TIER_ONE_COST,
+            // $200
+            Plan::Tier2 => Self::TIER_TWO_COST,
+            // $875
+            Plan::Tier3 => Self::TIER_THREE_COST,
+        }
+    }
+
+    pub fn get_plan_limit(&self) -> u32 {
+        match self {
+            Plan::Free => Self::FREE_TIER_LIMIT,
+            Plan::Tier1 => Self::TIER_ONE,
+            Plan::Tier2 => Self::TIER_TWO,
+            Plan::Tier3 => Self::TIER_THREE,
+        }
     }
 }
 
@@ -116,6 +158,7 @@ impl Display for Chain {
             Chain::Polygon => write!(f, "polygon"),
             Chain::Optimism => write!(f, "optimism"),
             Chain::Arbitrum => write!(f, "arbitrum"),
+            Chain::Anvil => write!(f, "anvil"),
         }
     }
 }

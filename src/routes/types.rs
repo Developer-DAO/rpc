@@ -24,7 +24,7 @@ impl JWTKey {
 pub struct Claims {
     pub role: Role,
     pub email: String,
-    pub wallet: Address,
+    pub wallet: Option<Address>,
 }
 
 pub struct Email {
@@ -48,7 +48,6 @@ impl Email {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RegisterUser {
     pub email: String,
-    pub wallet: String,
     pub password: String,
 }
 

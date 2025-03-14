@@ -1,7 +1,7 @@
 use crate::routes::types::{Claims, JWT_KEY};
 use axum::{
     extract::Request,
-    http::{header::COOKIE, HeaderMap},
+    http::{HeaderMap, header::COOKIE},
     middleware::Next,
     response::{IntoResponse, Response},
 };
@@ -21,11 +21,7 @@ pub async fn verify_jwt(
         .split(';')
         .filter_map(|t| {
             let t = t.trim_start();
-            if t.starts_with("jwt") {
-                Some(t)
-            } else {
-                None
-            }
+            if t.starts_with("jwt") { Some(t) } else { None }
         })
         .collect::<Vec<&str>>()
         .first()

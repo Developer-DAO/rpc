@@ -1,14 +1,14 @@
 use super::types::{Claims, JWT_KEY};
 use crate::database::{
     errors::ParsingError,
-    types::{Customers, Role, RELATIONAL_DATABASE},
+    types::{Customers, RELATIONAL_DATABASE, Role},
 };
 use alloy::primitives::Address;
 use argon2::{Argon2, PasswordHash, PasswordVerifier};
 use axum::{
-    http::{header::SET_COOKIE, HeaderMap, HeaderValue, StatusCode},
-    response::IntoResponse,
     Json,
+    http::{HeaderMap, HeaderValue, StatusCode, header::SET_COOKIE},
+    response::IntoResponse,
 };
 use jwt_simple::{algorithms::MACLike, reexports::coarsetime::Duration};
 use serde::{Deserialize, Serialize};
@@ -48,7 +48,7 @@ pub async fn user_login(
     let user_info = Claims {
         role: user.role,
         email: user.email,
-        wallet: user.wallet.parse::<Address>().unwrap(),
+        wallet: user.wallet.map(|w| w.parse::<Address>().unwrap()),
     };
     let claims = jwt_simple::claims::Claims::with_custom_claims(user_info, Duration::from_hours(2));
     let key = JWT_KEY.get().unwrap();
@@ -108,18 +108,19 @@ pub mod tests {
     }
 
     use crate::{
+        Database, Email, JWTKey, TcpListener,
         database::types::RELATIONAL_DATABASE,
         middleware::jwt_auth::verify_jwt,
         register_user,
         routes::{
-            activate::{activate_account, ActivationRequest},
+            activate::{ActivationRequest, activate_account},
             api_keys::generate_api_keys,
             login::LoginRequest,
             types::RegisterUser,
         },
-        user_login, Database, Email, JWTKey, TcpListener,
+        user_login,
     };
-    use axum::{http::StatusCode, middleware::from_fn, routing::post, Router};
+    use axum::{Router, middleware::from_fn, routing::post};
     use dotenvy::dotenv;
 
     #[tokio::test]
@@ -146,7 +147,6 @@ pub mod tests {
             .post("http://localhost:3030/api/register")
             .json(&RegisterUser {
                 email: "abc@aol.com".to_string(),
-                wallet: "0x0c5E7D8C1494B74891e4c6539Be96C8e2402dcEF".to_string(),
                 password: "test".to_string(),
             })
             .send()
