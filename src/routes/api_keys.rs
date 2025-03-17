@@ -63,7 +63,7 @@ pub async fn get_all_api_keys(
     .fetch_all(RELATIONAL_DATABASE.get().unwrap())
     .await?;
 
-    Ok((StatusCode::OK, serde_json::to_string(&keys)?))
+    Ok((StatusCode::OK, sonic_rs::to_string(&keys)?))
 }
 
 #[tracing::instrument]
@@ -80,7 +80,7 @@ pub enum ApiKeyError {
     #[error(transparent)]
     DatabaseError(#[from] sqlx::Error),
     #[error(transparent)]
-    JsonError(#[from] serde_json::Error),
+    JsonError(#[from] sonic_rs::Error),
     #[error("Failed to find key in database.")]
     KeyNotFound,
     #[error("You have reached your maximum allocation of API keys.")]

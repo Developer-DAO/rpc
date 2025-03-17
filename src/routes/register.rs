@@ -82,17 +82,15 @@ pub async fn register_user(
                 plan,
                 verificationcode, 
                 calls, 
-                leftovercalls, 
                 balance,
                 activated
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)"#,
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"#,
             &payload.email,
             hashed_pass,
             Role::Normie as Role,
             Plan::Free as Plan,
             verification_code.to_string(),
-            0,
             0,
             0,
             false,

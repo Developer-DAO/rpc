@@ -19,7 +19,6 @@ use axum::http::StatusCode;
 use axum::{Json, response::IntoResponse};
 use jwt_simple::claims::JWTClaims;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use sqlx::types::time::OffsetDateTime;
 use std::num::ParseFloatError;
 use std::sync::OnceLock;
@@ -120,9 +119,6 @@ pub enum Transfer {
     TransferFrom(ERC20::transferFromCall),
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
-pub struct Months(pub u8);
-
 #[derive(Serialize, Deserialize, Debug)]
 pub struct EthereumPayment {
     pub chain: Chain,
@@ -207,8 +203,9 @@ pub async fn process_ethereum_payment(
 
     let res: &Transaction = &res??;
 
-    // todo: uncomment once SIWE is implemented
-    // assert!(jwt.custom.wallet.is_some_and(|e| res.from == e));
+    if jwt.custom.wallet.is_some_and(|e| res.from == e) == false {
+        Err(PaymentError::SenderWalletMismatch)?
+    }
 
     let payment: Payments = match res.input == Bytes::new() {
         // ether
@@ -304,10 +301,9 @@ pub async fn process_ethereum_payment(
 
     credit_account(&payment.customer_email, payment.usd_value).await?;
     insert_payment(&payment).await?;
-    println!("End of function");
     Ok((
         StatusCode::OK,
-        json!({"paid": payment.usd_value}).to_string(),
+        payment.usd_value.to_string(),
     )
         .into_response())
 }
@@ -384,6 +380,8 @@ async fn credit_account(email: &str, amount: i64) -> Result<(), PaymentError> {
 //Error handling for submitPayment
 #[derive(Error, Debug)]
 pub enum PaymentError {
+    #[error("The sender of the transaction does not match the account's wallet on file. Please change the wallet associated with your account if this is in error.")]
+    SenderWalletMismatch,
     #[error(transparent)]
     ParseError(#[from] ParseError),
     #[error(transparent)]
@@ -435,10 +433,8 @@ impl IntoResponse for PaymentError {
 #[cfg(test)]
 mod tests {
     use std::time::Duration;
-
     use super::*;
     use alloy::{network::EthereumWallet, node_bindings::Anvil, signers::local::PrivateKeySigner};
-
     use crate::{
         Database, Email, JWTKey, TcpListener,
         database::types::RELATIONAL_DATABASE,
@@ -457,9 +453,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_payment() {
-        // todo: make test not flaky by deleting inserted data
-        // in pg
-
         dotenv().unwrap();
         JWTKey::init().unwrap();
         Database::init().await.unwrap();
@@ -526,7 +519,7 @@ mod tests {
             axum::serve(listener, app).await.unwrap();
         });
 
-        let reg_res = reqwest::Client::new()
+        let _reg_res = reqwest::Client::new()
             .post("http://localhost:3072/api/register")
             .json(&RegisterUser {
                 email: "0xe3024@gmail.com".to_string(),
@@ -558,6 +551,14 @@ mod tests {
             code: code.verificationcode,
             email: "0xe3024@gmail.com".to_string(),
         };
+
+        sqlx::query!(
+            "UPDATE Customers SET wallet = $1 where email = $2",
+            signer.address().to_string(),
+            "0xe3024@gmail.com"
+        )
+        .execute(RELATIONAL_DATABASE.get().unwrap())
+        .await.unwrap();
 
         reqwest::Client::new()
             .post("http://localhost:3072/api/activate")
@@ -599,11 +600,10 @@ mod tests {
             .send()
             .await
             .unwrap()
-            .json::<serde_json::Value>()
+            .text()
             .await
             .unwrap();
-        println!("{res}");
-        assert_eq!(res["paid"], 100000);
+        assert_eq!(res.parse::<i64>().unwrap(), 100000);
 
         // let res = ddrpc_client
         //     .post("http://localhost:3072/api/pay")
@@ -618,5 +618,15 @@ mod tests {
         // println!("Credits from payment: {:?}", res);
         //
         // assert!(res.parse::<i64>().unwrap() > 0);
+
+        sqlx::query!("DELETE FROM Customers WHERE email = $1", "0xe3024@gmail.com")
+            .execute(RELATIONAL_DATABASE.get().unwrap())
+            .await
+            .unwrap();
+
+        sqlx::query!("DELETE FROM Payments WHERE customerEmail = $1", "0xe3024@gmail.com")
+            .execute(RELATIONAL_DATABASE.get().unwrap())
+            .await
+            .unwrap();
     }
 }

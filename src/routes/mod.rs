@@ -7,3 +7,4 @@ pub mod recovery;
 pub mod register;
 pub mod relayer;
 pub mod types;
+pub mod siwe;

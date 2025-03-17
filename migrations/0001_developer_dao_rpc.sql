@@ -12,9 +12,7 @@ CREATE TABLE IF NOT EXISTS Customers (
     planExpiration TIMESTAMPTZ,
     verificationCode VARCHAR(10) NOT NULL,
     calls BIGINT NOT NULL,
-    -- after the month is up, remaining calls get added here
-    -- PAID PLANS ONLY
-    leftoverCalls BIGINT NOT NULL,
+    nonce TEXT,
     balance BIGINT NOT NULL,
     activated bool NOT NULL
 );

@@ -24,6 +24,7 @@ use axum::{
 use database::types::Database;
 use dotenvy::dotenv;
 use routes::payment::process_ethereum_payment;
+use routes::siwe::{get_siwe_nonce, siwe_add_wallet};
 use tokio::net::TcpListener;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::info;
@@ -70,6 +71,10 @@ async fn main() {
     let payments = Router::new()
         .route("/api/pay/eth", post(process_ethereum_payment))
         .route_layer(from_fn(verify_jwt));
+    let siwe = Router::new()
+        .route("/api/siwe/nonce", get(get_siwe_nonce))
+        .route("/api/siwe/add_wallet", post(siwe_add_wallet))
+        .route_layer(from_fn(verify_jwt));
 
     let app = Router::new()
         .route(
@@ -77,12 +82,12 @@ async fn main() {
             get(|| async { (StatusCode::OK, "GM, we are fully operational").into_response() }),
         )
         .route("/api/register", post(register_user))
-        //       .route("/api/verifypayment/:emailaddress", get(verify_subscription))
         .route("/api/activate", post(activate_account))
         .route("/api/login", post(user_login))
         .route("/api/recovery", post(update_password))
         .route("/api/recovery/:email", get(recover_password_email))
         .merge(api_keys)
+        .merge(siwe)
         .merge(payments)
         .layer(cors_api)
         .merge(relayer);
@@ -91,11 +96,5 @@ async fn main() {
     axum::serve(listener, app).await.unwrap();
 }
 
-// routes:
-// checkhealth
-// register
-// verify_payment
-// login (for client side applications)
-// protected routes:
-// rpc_request
-// keys
+// todo: 
+// - SIWE login route (instead of email + pw)

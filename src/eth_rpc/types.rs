@@ -1,7 +1,7 @@
 use std::sync::{LazyLock, OnceLock};
 pub static TESTING_ENDPOINT: OnceLock<&'static str> = OnceLock::new();
 pub static ETHEREUM_ENDPOINT: LazyLock<[InternalEndpoints; 1]> = LazyLock::new(|| {
-    [InternalEndpoints::Optimism(
+    [InternalEndpoints::Ethereum(
         dotenvy::var("ETHEREUM_ENDPOINT").unwrap().leak(),
     )]
 });
@@ -13,6 +13,7 @@ pub enum InternalEndpoints {
     Polygon(&'static str),
     Base(&'static str),
     Anvil(&'static str),
+    Ethereum(&'static str),
 }
 
 impl InternalEndpoints {
@@ -23,6 +24,7 @@ impl InternalEndpoints {
             InternalEndpoints::Polygon(p) => p,
             InternalEndpoints::Base(b) => b,
             InternalEndpoints::Anvil(a) => a,
+            InternalEndpoints::Ethereum(e) => e,
         }
     }
 }
