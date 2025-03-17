@@ -23,6 +23,7 @@ use axum::{
 };
 use database::types::Database;
 use dotenvy::dotenv;
+use routes::login::user_login_siwe;
 use routes::payment::process_ethereum_payment;
 use routes::siwe::{get_siwe_nonce, siwe_add_wallet};
 use tokio::net::TcpListener;
@@ -84,6 +85,7 @@ async fn main() {
         .route("/api/register", post(register_user))
         .route("/api/activate", post(activate_account))
         .route("/api/login", post(user_login))
+        .route("/api/login/siwe", post(user_login_siwe))
         .route("/api/recovery", post(update_password))
         .route("/api/recovery/:email", get(recover_password_email))
         .merge(api_keys)
@@ -98,3 +100,4 @@ async fn main() {
 
 // todo: 
 // - SIWE login route (instead of email + pw)
+// - Deploy sepolia contracts for Saul

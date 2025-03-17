@@ -27,17 +27,6 @@ use thiserror::Error;
 use tokio::task::JoinError;
 use tracing::info;
 
-// const TOKENS_SUPPORTED: [&str; 8] = [
-//     "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
-//     "0x7F5c764cBc14f9669B88837ca1490cCa17c31607",
-//     "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
-//     "0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8",
-//     "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",
-//     "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
-//     "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
-//     "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-// ];
-
 #[derive(Serialize, Deserialize, Debug)]
 pub struct PriceData {
     data: AssetData,
@@ -134,13 +123,10 @@ pub async fn process_ethereum_payment(
     } else {
         ETHEREUM_ENDPOINT
             .iter()
-            .find(|e| match (e, payload.chain) {
-                (crate::eth_rpc::types::InternalEndpoints::Optimism(_), Chain::Optimism) => true,
-                (crate::eth_rpc::types::InternalEndpoints::Arbitrum(_), Chain::Arbitrum) => true,
-                (crate::eth_rpc::types::InternalEndpoints::Polygon(_), Chain::Polygon) => true,
-                (crate::eth_rpc::types::InternalEndpoints::Base(_), Chain::Base) => true,
-                _ => false,
-            })
+            .find(|e| matches!((e, payload.chain), (crate::eth_rpc::types::InternalEndpoints::Optimism(_), Chain::Optimism) |
+                (crate::eth_rpc::types::InternalEndpoints::Arbitrum(_), Chain::Arbitrum) |
+                (crate::eth_rpc::types::InternalEndpoints::Polygon(_), Chain::Polygon) |
+                (crate::eth_rpc::types::InternalEndpoints::Base(_), Chain::Base)))
             .ok_or_else(|| PaymentError::InvalidNetwork)?
             .as_str()
     };
@@ -151,7 +137,7 @@ pub async fn process_ethereum_payment(
 
     let res: tokio::task::JoinHandle<Result<Transaction, PaymentError>> = {
         tokio::spawn(async move {
-            let eth = reqwest::Url::parse(&endpoint).unwrap();
+            let eth = reqwest::Url::parse(endpoint).unwrap();
             let provider = ProviderBuilder::new().on_http(eth);
             provider
                 .get_transaction_by_hash(FixedBytes::from(&fixed))
@@ -162,7 +148,7 @@ pub async fn process_ethereum_payment(
 
     let receipt: tokio::task::JoinHandle<Result<TransactionReceipt, PaymentError>> = {
         tokio::spawn(async move {
-            let eth = reqwest::Url::parse(&endpoint).unwrap();
+            let eth = reqwest::Url::parse(endpoint).unwrap();
             let provider = ProviderBuilder::new().on_http(eth);
             provider
                 .get_transaction_receipt(FixedBytes::from(&fixed))
@@ -173,7 +159,7 @@ pub async fn process_ethereum_payment(
 
     let last_safe_block: tokio::task::JoinHandle<Result<u64, PaymentError>> = {
         tokio::spawn(async move {
-            let eth = reqwest::Url::parse(&endpoint).unwrap();
+            let eth = reqwest::Url::parse(endpoint).unwrap();
             let provider = ProviderBuilder::new().on_http(eth);
             provider
                 .get_block(BlockId::safe(), BlockTransactionsKind::Full)
@@ -203,7 +189,7 @@ pub async fn process_ethereum_payment(
 
     let res: &Transaction = &res??;
 
-    if jwt.custom.wallet.is_some_and(|e| res.from == e) == false {
+    if jwt.custom.wallet.is_none_or(|e| res.from == e) {
         Err(PaymentError::SenderWalletMismatch)?
     }
 

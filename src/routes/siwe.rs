@@ -16,8 +16,8 @@ use super::types::Claims;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Siwe {
-    message: String,
-    signature: Vec<u8>,
+    pub message: String,
+    pub signature: Vec<u8>,
 }
 
 #[derive(FromRow)]
@@ -29,7 +29,7 @@ pub async fn siwe_add_wallet(
     Extension(jwt): Extension<JWTClaims<Claims>>,
     Json(payload): Json<Siwe>,
 ) -> Result<impl IntoResponse, SiweError> {
-    let msg: Message = payload.message.parse().unwrap();
+    let msg: Message = payload.message.parse()?;
 
     let nonce = sqlx::query_as!(
         Nonce,
@@ -87,6 +87,8 @@ pub enum SiweError {
     IncorrectNonce,
     #[error("An error ocurred while querying the database")]
     QueryError(#[from] sqlx::Error),
+    #[error(transparent)]
+    ParseError(#[from] siwe::ParseError),
 }
 
 impl IntoResponse for SiweError {

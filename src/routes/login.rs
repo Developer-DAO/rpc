@@ -1,9 +1,15 @@
-use super::types::{Claims, JWT_KEY};
-use crate::database::{
-    errors::ParsingError,
-    types::{Customers, RELATIONAL_DATABASE, Role},
+use super::{
+    siwe::Siwe,
+    types::{Claims, JWT_KEY},
 };
-use alloy::primitives::Address;
+use crate::{
+    database::{
+        errors::ParsingError,
+        types::{Customers, RELATIONAL_DATABASE, Role},
+    },
+    eth_rpc::types::ETHEREUM_ENDPOINT,
+};
+use alloy::{primitives::Address, providers::ProviderBuilder};
 use argon2::{Argon2, PasswordHash, PasswordVerifier};
 use axum::{
     Json,
@@ -12,12 +18,72 @@ use axum::{
 };
 use jwt_simple::{algorithms::MACLike, reexports::coarsetime::Duration};
 use serde::{Deserialize, Serialize};
+use siwe::{Message, VerificationError, VerificationOpts};
 use thiserror::Error;
+use time::OffsetDateTime;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct LoginRequest {
     pub(crate) email: String,
     pub(crate) password: String,
+}
+
+pub struct SiweLogin {
+    pub email: String,
+    pub wallet: Option<String>,
+    pub role: Role,
+    pub nonce: Option<String>,
+}
+
+#[tracing::instrument]
+pub async fn user_login_siwe(Json(payload): Json<Siwe>) -> Result<impl IntoResponse, LoginError> {
+    let msg: Message = payload.message.parse()?;
+    let address = Address::new(msg.address);
+
+    let customer = sqlx::query_as!(
+        SiweLogin,
+        r#"SELECT email, wallet, nonce, role as "role!: Role" FROM Customers where wallet = $1"#,
+        address.to_string(),
+    )
+    .fetch_optional(RELATIONAL_DATABASE.get().unwrap())
+    .await?
+    .ok_or_else(|| LoginError::InvalidAddress)?;
+
+    let nonce = customer.nonce.ok_or_else(|| LoginError::MissingNonce)?;
+
+    let rpc = ProviderBuilder::new().on_http(ETHEREUM_ENDPOINT[0].as_str().parse().unwrap());
+
+    let verification_opts = VerificationOpts {
+        domain: Some("Developer DAO Cloud".parse().unwrap()),
+        nonce: Some(nonce),
+        timestamp: Some(OffsetDateTime::now_utc()),
+        rpc_provider: Some(rpc),
+    };
+
+    msg.verify(&payload.signature, &verification_opts).await?;
+
+    let user_info = Claims {
+        role: customer.role,
+        email: customer.email,
+        wallet: Some(address),
+    };
+    let claims = jwt_simple::claims::Claims::with_custom_claims(user_info, Duration::from_hours(2));
+    let key = JWT_KEY.get().unwrap();
+    let auth = key.authenticate(claims)?;
+
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        SET_COOKIE,
+        HeaderValue::from_str(&format!("jwt={}", auth)).unwrap(),
+    );
+    headers.append(SET_COOKIE, HeaderValue::from_str("Secure").unwrap());
+    headers.append(SET_COOKIE, HeaderValue::from_str("HttpOnly").unwrap());
+    headers.append(
+        SET_COOKIE,
+        HeaderValue::from_str("SameSite=Strict").unwrap(),
+    );
+
+    Ok((StatusCode::OK, headers))
 }
 
 #[tracing::instrument]
@@ -71,6 +137,10 @@ pub async fn user_login(
 
 #[derive(Debug, Error)]
 pub enum LoginError {
+    #[error(transparent)]
+    VerificationError(#[from] VerificationError),
+    #[error("User did not generate nonce")]
+    MissingNonce,
     #[error("The email or password you provided is invalid.")]
     InvalidEmailOrPassword,
     #[error(transparent)]
@@ -85,6 +155,10 @@ pub enum LoginError {
     AddressParsingError(#[from] ParsingError),
     #[error(transparent)]
     BuilderResponseError(#[from] axum::http::Error),
+    #[error("No account found for address")]
+    InvalidAddress,
+    #[error(transparent)]
+    ParseError(#[from] siwe::ParseError),
 }
 
 impl IntoResponse for LoginError {
