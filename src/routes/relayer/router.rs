@@ -1,7 +1,8 @@
 use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
 
 use super::types::RelayErrors;
-use crate::{json_rpc::types::JsonRpcRequest, routes::relayer::types::PoktChains};
+use crate::{json_rpc::types::JsonRpcRequest, routes::relayer::types::{PoktChains, Relayer}};
+
 use thiserror::Error;
 
 pub async fn route_call(
@@ -12,7 +13,7 @@ pub async fn route_call(
         .first()
         .ok_or_else(|| RouterErrors::DestinationError)?;
     let dest = raw_destination.parse::<PoktChains>()?;
-    let result = dest.relay_pokt_transaction(&body).await?;
+    let result = dest.relay_transaction(&body).await?;
     Ok((StatusCode::OK, result))
 }
 
