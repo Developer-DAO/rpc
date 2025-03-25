@@ -203,7 +203,7 @@ impl FromStr for PoktChains {
             "base" => Ok(PoktChains::Base),
             "basesepolia" => Ok(PoktChains::BaseSepoliaTestnet),
             "bitcoin" => Ok(PoktChains::Bitcoin),
-            "last" => Ok(PoktChains::Blast),
+            "blast" => Ok(PoktChains::Blast),
             "bsc" => Ok(PoktChains::BNBChain),
             "boba" => Ok(PoktChains::Boba),
             "celestiaconsensus" => Ok(PoktChains::CelestiaConsensus),
