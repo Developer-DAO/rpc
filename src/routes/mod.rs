@@ -1,6 +1,5 @@
 pub mod activate;
 pub mod api_keys;
-pub mod errors;
 pub mod login;
 pub mod payment;
 pub mod recovery;
