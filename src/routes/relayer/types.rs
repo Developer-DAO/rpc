@@ -125,7 +125,7 @@ impl fmt::Display for PoktChains {
 }
 
 impl PoktChains {
-    fn id(&self) -> &'static str {
+    pub const fn id(&self) -> &'static str {
         match self {
             PoktChains::ArbitrumOne => "F001",
             PoktChains::ArbitrumSepoliaTestnet => "F002",
@@ -203,7 +203,7 @@ impl FromStr for PoktChains {
             "base" => Ok(PoktChains::Base),
             "basesepolia" => Ok(PoktChains::BaseSepoliaTestnet),
             "bitcoin" => Ok(PoktChains::Bitcoin),
-            "blast" => Ok(PoktChains::Blast),
+            "last" => Ok(PoktChains::Blast),
             "bsc" => Ok(PoktChains::BNBChain),
             "boba" => Ok(PoktChains::Boba),
             "celestiaconsensus" => Ok(PoktChains::CelestiaConsensus),

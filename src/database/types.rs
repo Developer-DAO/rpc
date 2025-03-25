@@ -78,6 +78,7 @@ pub enum Chain {
     Arbitrum,
     Base,
     Anvil,
+    Sepolia,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, sqlx::Type)]
@@ -159,6 +160,7 @@ impl Display for Chain {
             Chain::Optimism => write!(f, "optimism"),
             Chain::Arbitrum => write!(f, "arbitrum"),
             Chain::Anvil => write!(f, "anvil"),
+            Chain::Sepolia => write!(f, "sepolia"),
         }
     }
 }

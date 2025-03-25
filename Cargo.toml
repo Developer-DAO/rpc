@@ -30,5 +30,8 @@ rayon = "1.10"
 alloy = {version = "0.2.0", features = ["node-bindings", "full"]}
 thiserror = "1.0.63"
 
+[features]
+dev = []
+
 [profile.release]
 debug = true

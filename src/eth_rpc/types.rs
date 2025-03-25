@@ -1,4 +1,7 @@
-use std::sync::{LazyLock, OnceLock};
+use std::sync::LazyLock;
+#[cfg(test)]
+use std::sync::OnceLock;
+#[cfg(test)]
 pub static TESTING_ENDPOINT: OnceLock<&'static str> = OnceLock::new();
 pub static ETHEREUM_ENDPOINT: LazyLock<[InternalEndpoints; 1]> = LazyLock::new(|| {
     [InternalEndpoints::Ethereum(
@@ -12,7 +15,6 @@ pub enum InternalEndpoints {
     Arbitrum(&'static str),
     Polygon(&'static str),
     Base(&'static str),
-    Anvil(&'static str),
     Ethereum(&'static str),
 }
 
@@ -23,7 +25,6 @@ impl InternalEndpoints {
             InternalEndpoints::Arbitrum(a) => a,
             InternalEndpoints::Polygon(p) => p,
             InternalEndpoints::Base(b) => b,
-            InternalEndpoints::Anvil(a) => a,
             InternalEndpoints::Ethereum(e) => e,
         }
     }

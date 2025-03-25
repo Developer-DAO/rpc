@@ -1,5 +1,5 @@
 CREATE TYPE PLAN AS ENUM('free', 'tier1', 'tier2', 'tier3');
-CREATE TYPE CHAIN AS ENUM('optimism', 'polygon', 'arbitrum', 'base', 'anvil');
+CREATE TYPE CHAIN AS ENUM('optimism', 'polygon', 'arbitrum', 'base', 'anvil', 'sepolia');
 CREATE TYPE ASSET AS ENUM('ether', 'usdc');
 CREATE TYPE ROLE AS ENUM('normie', 'admin');
 

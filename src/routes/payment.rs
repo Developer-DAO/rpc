@@ -1,7 +1,11 @@
 use super::types::Claims;
 use crate::database::types::{Asset, Chain};
 use crate::database::types::{Payments, RELATIONAL_DATABASE};
-use crate::eth_rpc::types::{ETHEREUM_ENDPOINT, TESTING_ENDPOINT};
+#[cfg(not(test))]
+#[cfg(not(feature = "dev"))]
+use crate::eth_rpc::types::ETHEREUM_ENDPOINT;
+#[cfg(test)]
+use crate::eth_rpc::types::TESTING_ENDPOINT;
 use alloy::eips::BlockId;
 use alloy::primitives::ruint::ParseError;
 use alloy::primitives::utils::{UnitsError, parse_units};
@@ -21,8 +25,12 @@ use jwt_simple::claims::JWTClaims;
 use serde::{Deserialize, Serialize};
 use sqlx::types::time::OffsetDateTime;
 use std::num::ParseFloatError;
+#[cfg(test)]
 use std::sync::OnceLock;
-use std::{collections::HashMap, sync::LazyLock};
+use std::collections::HashMap;
+#[cfg(not(test))]
+#[cfg(not(feature = "dev"))]
+use std::sync::LazyLock;
 use thiserror::Error;
 use tokio::task::JoinError;
 use tracing::info;
@@ -41,6 +49,7 @@ pub struct AssetData {
 
 static WALLET: Address = address!("0b2C639c533813f4Aa9D7837CAf62653d097Ff85");
 
+#[derive(Debug, Clone, Copy)]
 pub struct TokenDetails {
     pub decimals: u8,
     pub network: Chain,
@@ -57,8 +66,10 @@ impl TokenDetails {
     }
 }
 
+#[cfg(test)]
 static TEST_TOKEN: OnceLock<HashMap<Address, TokenDetails>> = OnceLock::new();
-
+#[cfg(not(test))]
+#[cfg(not(feature = "dev"))]
 static TOKENS: LazyLock<HashMap<Address, TokenDetails>> = LazyLock::new(|| {
     let mut map = HashMap::new();
     map.insert(
@@ -118,17 +129,41 @@ pub async fn process_ethereum_payment(
     Extension(jwt): Extension<JWTClaims<Claims>>,
     Json(payload): Json<EthereumPayment>,
 ) -> Result<impl IntoResponse, PaymentError> {
-    let endpoint = if cfg!(test) {
-        TESTING_ENDPOINT.get().unwrap()
-    } else {
-        ETHEREUM_ENDPOINT
-            .iter()
-            .find(|e| matches!((e, payload.chain), (crate::eth_rpc::types::InternalEndpoints::Optimism(_), Chain::Optimism) |
-                (crate::eth_rpc::types::InternalEndpoints::Arbitrum(_), Chain::Arbitrum) |
-                (crate::eth_rpc::types::InternalEndpoints::Polygon(_), Chain::Polygon) |
-                (crate::eth_rpc::types::InternalEndpoints::Base(_), Chain::Base)))
-            .ok_or_else(|| PaymentError::InvalidNetwork)?
-            .as_str()
+
+    #[cfg(not(test))]
+    #[cfg(not(feature = "dev"))]
+    let endpoint: &'static str  = ETHEREUM_ENDPOINT
+        .iter()
+        .find(|e| {
+            matches!(
+                (e, payload.chain),
+                (
+                    crate::eth_rpc::types::InternalEndpoints::Optimism(_),
+                    Chain::Optimism
+                ) | (
+                    crate::eth_rpc::types::InternalEndpoints::Arbitrum(_),
+                    Chain::Arbitrum
+                ) | (
+                    crate::eth_rpc::types::InternalEndpoints::Polygon(_),
+                    Chain::Polygon
+                ) | (
+                    crate::eth_rpc::types::InternalEndpoints::Base(_),
+                    Chain::Base
+                )
+            )
+        })
+        .ok_or_else(|| PaymentError::InvalidNetwork)?
+        .as_str();
+
+    #[cfg(test)]
+    let endpoint: &'static str = TESTING_ENDPOINT.get().unwrap();
+
+    #[cfg(feature = "dev")]
+    let endpoint: &'static str  = {
+        matches!(payload.chain, Chain::Sepolia)
+            .then(|| ())
+            .ok_or_else(|| PaymentError::InvalidNetwork)?;
+        dotenvy::var("SEPOLIA_PROVIDER}").unwrap().leak()
     };
 
     let hash = hex::decode(&payload.hash)?;
@@ -189,7 +224,9 @@ pub async fn process_ethereum_payment(
 
     let res: &Transaction = &res??;
 
-    if jwt.custom.wallet.is_none_or(|e| res.from == e) {
+    println!("JWT Wallet Address: {:?}", &jwt.custom.wallet);
+
+    if jwt.custom.wallet.is_none_or(|e| res.from != e) {
         Err(PaymentError::SenderWalletMismatch)?
     }
 
@@ -245,16 +282,24 @@ pub async fn process_ethereum_payment(
                 Err(PaymentError::IncorrectRecipient)?
             }
 
-            let token = if cfg!(test) {
-                TEST_TOKEN
-                    .get()
-                    .unwrap()
-                    .get(&token_address)
-                    .ok_or_else(|| PaymentError::UnsupportedToken)?
-            } else {
-                TOKENS
-                    .get(&token_address)
-                    .ok_or_else(|| PaymentError::UnsupportedToken)?
+            #[cfg(not(test))]
+            #[cfg(not(feature = "dev"))]
+            let token = *TOKENS
+                .get(&token_address)
+                .ok_or_else(|| PaymentError::UnsupportedToken)?;
+
+            #[cfg(test)]
+            let token = *TEST_TOKEN
+                .get()
+                .unwrap()
+                .get(&token_address)
+                .ok_or_else(|| PaymentError::UnsupportedToken)?;
+
+            #[cfg(feature = "dev")]
+            let token = TokenDetails {
+                decimals: 18,
+                network: Chain::Sepolia,
+                asset: Asset::USDC,
             };
 
             match token.asset {
@@ -287,11 +332,7 @@ pub async fn process_ethereum_payment(
 
     credit_account(&payment.customer_email, payment.usd_value).await?;
     insert_payment(&payment).await?;
-    Ok((
-        StatusCode::OK,
-        payment.usd_value.to_string(),
-    )
-        .into_response())
+    Ok((StatusCode::OK, payment.usd_value.to_string()).into_response())
 }
 
 // async fn calculate_eth_value(eth_amount: U256) -> Result<U256, PaymentError> {
@@ -366,7 +407,9 @@ async fn credit_account(email: &str, amount: i64) -> Result<(), PaymentError> {
 //Error handling for submitPayment
 #[derive(Error, Debug)]
 pub enum PaymentError {
-    #[error("The sender of the transaction does not match the account's wallet on file. Please change the wallet associated with your account if this is in error.")]
+    #[error(
+        "The sender of the transaction does not match the account's wallet on file. Please change the wallet associated with your account if this is in error."
+    )]
     SenderWalletMismatch,
     #[error(transparent)]
     ParseError(#[from] ParseError),
@@ -418,9 +461,7 @@ impl IntoResponse for PaymentError {
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
     use super::*;
-    use alloy::{network::EthereumWallet, node_bindings::Anvil, signers::local::PrivateKeySigner};
     use crate::{
         Database, Email, JWTKey, TcpListener,
         database::types::RELATIONAL_DATABASE,
@@ -434,8 +475,10 @@ mod tests {
         },
         user_login,
     };
+    use alloy::{network::EthereumWallet, node_bindings::Anvil, signers::local::PrivateKeySigner};
     use axum::{Router, middleware::from_fn, routing::post};
     use dotenvy::dotenv;
+    use std::time::Duration;
 
     #[tokio::test]
     async fn test_payment() {
@@ -537,14 +580,15 @@ mod tests {
             code: code.verificationcode,
             email: "0xe3024@gmail.com".to_string(),
         };
-
+        println!("Signer Address: {}", signer.address());
         sqlx::query!(
             "UPDATE Customers SET wallet = $1 where email = $2",
             signer.address().to_string(),
             "0xe3024@gmail.com"
         )
         .execute(RELATIONAL_DATABASE.get().unwrap())
-        .await.unwrap();
+        .await
+        .unwrap();
 
         reqwest::Client::new()
             .post("http://localhost:3072/api/activate")
@@ -589,6 +633,7 @@ mod tests {
             .text()
             .await
             .unwrap();
+        println!("{res}");
         assert_eq!(res.parse::<i64>().unwrap(), 100000);
 
         // let res = ddrpc_client
@@ -605,14 +650,20 @@ mod tests {
         //
         // assert!(res.parse::<i64>().unwrap() > 0);
 
-        sqlx::query!("DELETE FROM Customers WHERE email = $1", "0xe3024@gmail.com")
-            .execute(RELATIONAL_DATABASE.get().unwrap())
-            .await
-            .unwrap();
+        sqlx::query!(
+            "DELETE FROM Customers WHERE email = $1",
+            "0xe3024@gmail.com"
+        )
+        .execute(RELATIONAL_DATABASE.get().unwrap())
+        .await
+        .unwrap();
 
-        sqlx::query!("DELETE FROM Payments WHERE customerEmail = $1", "0xe3024@gmail.com")
-            .execute(RELATIONAL_DATABASE.get().unwrap())
-            .await
-            .unwrap();
+        sqlx::query!(
+            "DELETE FROM Payments WHERE customerEmail = $1",
+            "0xe3024@gmail.com"
+        )
+        .execute(RELATIONAL_DATABASE.get().unwrap())
+        .await
+        .unwrap();
     }
 }

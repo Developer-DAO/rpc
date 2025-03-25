@@ -98,6 +98,6 @@ async fn main() {
     axum::serve(listener, app).await.unwrap();
 }
 
-// todo: 
+// todo:
 // - SIWE login route (instead of email + pw)
 // - Deploy sepolia contracts for Saul
