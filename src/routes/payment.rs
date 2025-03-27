@@ -1,5 +1,5 @@
 use super::types::Claims;
-use crate::database::types::{Asset, Chain};
+use crate::database::types::{Asset, Chain, Plan};
 use crate::database::types::{Payments, RELATIONAL_DATABASE};
 #[cfg(not(test))]
 #[cfg(not(feature = "dev"))]
@@ -27,6 +27,7 @@ use sqlx::types::time::OffsetDateTime;
 use std::num::ParseFloatError;
 #[cfg(test)]
 use std::sync::OnceLock;
+#[cfg(not(feature = "dev"))]
 use std::collections::HashMap;
 #[cfg(not(test))]
 #[cfg(not(feature = "dev"))]
@@ -123,6 +124,42 @@ pub enum Transfer {
 pub struct EthereumPayment {
     pub chain: Chain,
     pub hash: String,
+}
+
+pub struct Balances {
+    balance: i64, 
+}
+
+pub struct ApplyPayment {
+    plan: Plan,
+    duration: u8,
+}
+
+pub async fn apply_payment_to_plan(
+    Extension(jwt): Extension<JWTClaims<Claims>>,
+    Json(payload): Json<ApplyPayment>,
+) ->Result<impl IntoResponse, PaymentError> {
+
+    let balance = sqlx::query_as!(Balances, 
+        "SELECT balance from Customers where email = $1",
+        jwt.custom.email
+    )
+        .fetch_one(RELATIONAL_DATABASE.get().unwrap())
+        .await?
+        .balance;
+
+    let plan_cost = payload.plan.get_cost();
+    let total_cost = plan_cost as i64 * payload.duration as i64; 
+
+    if total_cost < balance {
+        // happy path
+    } else {
+       // sad path  
+    }
+
+        
+
+    Ok((StatusCode::OK, "").into_response())
 }
 
 pub async fn process_ethereum_payment(
@@ -265,6 +302,7 @@ pub async fn process_ethereum_payment(
             } else {
                 Err(PaymentError::AbiDecodingError)?
             };
+            #[cfg(not(feature = "dev"))]
             let token_address = res.to.ok_or_else(|| PaymentError::UnsupportedToken)?;
             let (amount, to) = match decoded {
                 Transfer::Transfer(tx) => (tx.amount, tx.to),
