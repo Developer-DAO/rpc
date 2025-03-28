@@ -44,7 +44,7 @@ pub async fn siwe_add_wallet(
     let rpc = ProviderBuilder::new().on_http(ETHEREUM_ENDPOINT[0].as_str().parse().unwrap());
 
     let domain = if cfg!(feature = "dev") {
-        "localhost:5174"
+        "localhost:5173"
     } else {
         "Developer DAO Cloud"
     };

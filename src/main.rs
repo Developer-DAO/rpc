@@ -24,7 +24,7 @@ use axum::{
 use database::types::Database;
 use dotenvy::dotenv;
 use routes::login::user_login_siwe;
-use routes::payment::process_ethereum_payment;
+use routes::payment::{apply_payment_to_plan, process_ethereum_payment};
 use routes::siwe::{get_siwe_nonce, siwe_add_wallet};
 use tokio::net::TcpListener;
 use tower_http::cors::{Any, CorsLayer};
@@ -51,7 +51,7 @@ async fn main() {
 
     let cors_api = CorsLayer::new()
         .allow_credentials(true)
-        .allow_origin("http://localhost:5174".parse::<HeaderValue>().unwrap())
+        .allow_origin("http://localhost:5173".parse::<HeaderValue>().unwrap())
         .allow_methods([Method::GET, Method::POST, Method::DELETE])
         .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION, header::COOKIE]);
 
@@ -71,6 +71,7 @@ async fn main() {
         .route_layer(from_fn(verify_jwt));
     let payments = Router::new()
         .route("/api/pay/eth", post(process_ethereum_payment))
+        .route("/api/pay/apply", post(apply_payment_to_plan))
         .route_layer(from_fn(verify_jwt));
     let siwe = Router::new()
         .route("/api/siwe/nonce", get(get_siwe_nonce))
@@ -97,7 +98,3 @@ async fn main() {
     let listener = TcpListener::bind("0.0.0.0:3000").await.unwrap();
     axum::serve(listener, app).await.unwrap();
 }
-
-// todo:
-// - SIWE login route (instead of email + pw)
-// - Deploy sepolia contracts for Saul

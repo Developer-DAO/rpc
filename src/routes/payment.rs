@@ -22,6 +22,7 @@ use axum::Extension;
 use axum::http::StatusCode;
 use axum::{Json, response::IntoResponse};
 use jwt_simple::claims::JWTClaims;
+use time::ext::NumericalDuration;
 use serde::{Deserialize, Serialize};
 use sqlx::types::time::OffsetDateTime;
 use std::num::ParseFloatError;
@@ -130,6 +131,7 @@ pub struct Balances {
     balance: i64, 
 }
 
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ApplyPayment {
     plan: Plan,
     duration: u8,
@@ -140,26 +142,33 @@ pub async fn apply_payment_to_plan(
     Json(payload): Json<ApplyPayment>,
 ) ->Result<impl IntoResponse, PaymentError> {
 
-    let balance = sqlx::query_as!(Balances, 
+    let info = sqlx::query_as!(Balances, 
         "SELECT balance from Customers where email = $1",
         jwt.custom.email
     )
         .fetch_one(RELATIONAL_DATABASE.get().unwrap())
-        .await?
-        .balance;
+        .await?;
 
     let plan_cost = payload.plan.get_cost();
     let total_cost = plan_cost as i64 * payload.duration as i64; 
 
-    if total_cost < balance {
-        // happy path
+    let new_expiry = OffsetDateTime::now_utc()
+        .checked_add((30 * payload.duration as i64).days())
+        .ok_or_else(|| PaymentError::OverflowExpiry)?;
+
+    if total_cost <= info.balance {
+        sqlx::query!(
+            "UPDATE Customers SET balance = balance - $1, plan = $2, planExpiration = $3", 
+            total_cost, 
+            payload.plan as Plan, 
+            new_expiry)
+            .execute(RELATIONAL_DATABASE.get().unwrap())
+            .await?;
     } else {
-       // sad path  
+        Err(PaymentError::InsufficientFunds)?
     }
 
-        
-
-    Ok((StatusCode::OK, "").into_response())
+    Ok((StatusCode::OK, "Successfully applied payment").into_response())
 }
 
 pub async fn process_ethereum_payment(
@@ -445,6 +454,8 @@ async fn credit_account(email: &str, amount: i64) -> Result<(), PaymentError> {
 //Error handling for submitPayment
 #[derive(Error, Debug)]
 pub enum PaymentError {
+    #[error("An error occured while adjusting expiry dates. Please try again and please notify us if this occurs again.")]
+    OverflowExpiry,
     #[error(
         "The sender of the transaction does not match the account's wallet on file. Please change the wallet associated with your account if this is in error."
     )]
@@ -484,7 +495,7 @@ pub enum PaymentError {
     #[error("Transaction not found")]
     TxNotFound,
     #[error("Insufficient payment for plan and duration specified in call")]
-    InsufficientPayment,
+    InsufficientFunds,
     #[error("Invalid duration, must be greater than 0")]
     InvalidDuration,
     #[error("Network is not currently supported")]
