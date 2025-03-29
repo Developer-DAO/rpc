@@ -24,7 +24,9 @@ use axum::{
 use database::types::Database;
 use dotenvy::dotenv;
 use routes::login::user_login_siwe;
-use routes::payment::{apply_payment_to_plan, process_ethereum_payment};
+use routes::payment::{
+    apply_payment_to_plan, get_calls_and_balance, get_payments, process_ethereum_payment,
+};
 use routes::siwe::{get_siwe_nonce, siwe_add_wallet};
 use tokio::net::TcpListener;
 use tower_http::cors::{Any, CorsLayer};
@@ -72,6 +74,8 @@ async fn main() {
     let payments = Router::new()
         .route("/api/pay/eth", post(process_ethereum_payment))
         .route("/api/pay/apply", post(apply_payment_to_plan))
+        .route("/api/balances", get(get_calls_and_balance))
+        .route("/api/payments", get(get_payments))
         .route_layer(from_fn(verify_jwt));
     let siwe = Router::new()
         .route("/api/siwe/nonce", get(get_siwe_nonce))

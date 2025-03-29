@@ -45,14 +45,14 @@ pub struct PaymentInfo {
 
 #[derive(FromRow, Debug, Serialize, Deserialize)]
 pub struct Payments {
-    pub customer_email: String,
-    pub transaction_hash: String,
+    pub customeremail: String,
+    pub transactionhash: String,
     pub asset: Asset,
     pub amount: String,
     pub chain: Chain,
     pub date: OffsetDateTime,
-    pub usd_value: i64,
-    pub decimals: i8,
+    pub usdvalue: i64,
+    pub decimals: i32,
 }
 
 #[derive(FromRow, Debug, Serialize, Deserialize)]

@@ -1,6 +1,5 @@
 use super::types::Claims;
-use crate::database::types::{Asset, Chain, Plan};
-use crate::database::types::{Payments, RELATIONAL_DATABASE};
+use crate::database::types::{Asset, Chain, Payments, Plan, RELATIONAL_DATABASE};
 #[cfg(not(test))]
 #[cfg(not(feature = "dev"))]
 use crate::eth_rpc::types::ETHEREUM_ENDPOINT;
@@ -19,21 +18,22 @@ use alloy::{
     sol_types::SolCall,
 };
 use axum::Extension;
+use axum::extract::Query;
 use axum::http::StatusCode;
 use axum::{Json, response::IntoResponse};
 use jwt_simple::claims::JWTClaims;
-use time::ext::NumericalDuration;
 use serde::{Deserialize, Serialize};
 use sqlx::types::time::OffsetDateTime;
-use std::num::ParseFloatError;
-#[cfg(test)]
-use std::sync::OnceLock;
 #[cfg(not(feature = "dev"))]
 use std::collections::HashMap;
+use std::num::ParseFloatError;
 #[cfg(not(test))]
 #[cfg(not(feature = "dev"))]
 use std::sync::LazyLock;
+#[cfg(test)]
+use std::sync::OnceLock;
 use thiserror::Error;
+use time::ext::NumericalDuration;
 use tokio::task::JoinError;
 use tracing::info;
 
@@ -128,7 +128,7 @@ pub struct EthereumPayment {
 }
 
 pub struct Balances {
-    balance: i64, 
+    balance: i64,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -137,20 +137,69 @@ pub struct ApplyPayment {
     duration: u8,
 }
 
+#[derive(Deserialize)]
+pub struct Pagination {
+    page: usize,
+    per_page: usize,
+}
+
+#[derive(Debug, Serialize)]
+pub struct UserBalances {
+    calls: i64,
+    balance: i64,
+}
+
+pub async fn get_calls_and_balance(
+    Extension(jwt): Extension<JWTClaims<Claims>>,
+) -> Result<impl IntoResponse, PaymentError> {
+    let res = sqlx::query_as!(
+        UserBalances,
+        "SELECT calls, balance 
+        FROM Customers 
+        where email = $1",
+        jwt.custom.email
+    )
+    .fetch_one(RELATIONAL_DATABASE.get().unwrap())
+    .await?;
+
+    Ok((StatusCode::OK, sonic_rs::to_string(&res)?).into_response())
+}
+
+pub async fn get_payments(
+    Query(params): Query<Pagination>,
+    Extension(jwt): Extension<JWTClaims<Claims>>,
+) -> Result<impl IntoResponse, PaymentError> {
+    let res: Vec<Payments> = sqlx::query_as!(
+        Payments,
+        r#"SELECT customerEmail, transactionHash, asset as "asset!: Asset",
+        amount, decimals, chain as "chain!: Chain", date, usdValue
+        FROM Payments WHERE customerEmail = $1 
+        LIMIT $2 
+        OFFSET $3
+        "#,
+        jwt.custom.email,
+        params.per_page as i64,
+        params.page as i64,
+    )
+    .fetch_all(RELATIONAL_DATABASE.get().unwrap())
+    .await?;
+    Ok((StatusCode::OK, sonic_rs::to_string(&res)?).into_response())
+}
+
 pub async fn apply_payment_to_plan(
     Extension(jwt): Extension<JWTClaims<Claims>>,
     Json(payload): Json<ApplyPayment>,
-) ->Result<impl IntoResponse, PaymentError> {
-
-    let info = sqlx::query_as!(Balances, 
+) -> Result<impl IntoResponse, PaymentError> {
+    let info = sqlx::query_as!(
+        Balances,
         "SELECT balance from Customers where email = $1",
         jwt.custom.email
     )
-        .fetch_one(RELATIONAL_DATABASE.get().unwrap())
-        .await?;
+    .fetch_one(RELATIONAL_DATABASE.get().unwrap())
+    .await?;
 
     let plan_cost = payload.plan.get_cost();
-    let total_cost = plan_cost as i64 * payload.duration as i64; 
+    let total_cost = plan_cost as i64 * payload.duration as i64;
 
     let new_expiry = OffsetDateTime::now_utc()
         .checked_add((30 * payload.duration as i64).days())
@@ -158,12 +207,13 @@ pub async fn apply_payment_to_plan(
 
     if total_cost <= info.balance {
         sqlx::query!(
-            "UPDATE Customers SET balance = balance - $1, plan = $2, planExpiration = $3", 
-            total_cost, 
-            payload.plan as Plan, 
-            new_expiry)
-            .execute(RELATIONAL_DATABASE.get().unwrap())
-            .await?;
+            "UPDATE Customers SET balance = balance - $1, plan = $2, planExpiration = $3",
+            total_cost,
+            payload.plan as Plan,
+            new_expiry
+        )
+        .execute(RELATIONAL_DATABASE.get().unwrap())
+        .await?;
     } else {
         Err(PaymentError::InsufficientFunds)?
     }
@@ -175,10 +225,9 @@ pub async fn process_ethereum_payment(
     Extension(jwt): Extension<JWTClaims<Claims>>,
     Json(payload): Json<EthereumPayment>,
 ) -> Result<impl IntoResponse, PaymentError> {
-
     #[cfg(not(test))]
     #[cfg(not(feature = "dev"))]
-    let endpoint: &'static str  = ETHEREUM_ENDPOINT
+    let endpoint: &'static str = ETHEREUM_ENDPOINT
         .iter()
         .find(|e| {
             matches!(
@@ -205,7 +254,7 @@ pub async fn process_ethereum_payment(
     let endpoint: &'static str = TESTING_ENDPOINT.get().unwrap();
 
     #[cfg(feature = "dev")]
-    let endpoint: &'static str  = {
+    let endpoint: &'static str = {
         matches!(payload.chain, Chain::Sepolia)
             .then(|| ())
             .ok_or_else(|| PaymentError::InvalidNetwork)?;
@@ -360,26 +409,26 @@ pub async fn process_ethereum_payment(
 
             info!("USD amount paid: {}", value,);
 
-            let usd_value: String = format_units(value, token.decimals)?;
-            println!("USD_VALUE {}", usd_value);
-            let usd_value = (usd_value.parse::<f64>()? * 100.0) as i64;
+            let usdvalue: String = format_units(value, token.decimals)?;
+            println!("USD_VALUE {}", usdvalue);
+            let usdvalue = (usdvalue.parse::<f64>()? * 100.0) as i64;
 
             Payments {
-                customer_email: jwt.custom.email,
-                transaction_hash: hex::encode(hash),
+                customeremail: jwt.custom.email,
+                transactionhash: hex::encode(hash),
                 asset: token.asset,
                 amount: amount.to_string(),
                 chain: payload.chain,
                 date: OffsetDateTime::now_utc(),
-                decimals: token.decimals as i8,
-                usd_value,
+                decimals: token.decimals as i32,
+                usdvalue,
             }
         }
     };
 
-    credit_account(&payment.customer_email, payment.usd_value).await?;
+    credit_account(&payment.customeremail, payment.usdvalue).await?;
     insert_payment(&payment).await?;
-    Ok((StatusCode::OK, payment.usd_value.to_string()).into_response())
+    Ok((StatusCode::OK, payment.usdvalue.to_string()).into_response())
 }
 
 // async fn calculate_eth_value(eth_amount: U256) -> Result<U256, PaymentError> {
@@ -420,14 +469,14 @@ async fn insert_payment(payment: &Payments) -> Result<(), PaymentError> {
     sqlx::query!(
         "INSERT INTO Payments(customerEmail, transactionHash, asset, amount, chain, date, decimals, usdValue) 
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
-        payment.customer_email,
-        payment.transaction_hash,
+        payment.customeremail,
+        payment.transactionhash,
         payment.asset as crate::database::types::Asset,
         payment.amount,
         payment.chain as crate::database::types::Chain,
         payment.date,
         payment.decimals as i32,
-        payment.usd_value
+        payment.usdvalue
         
     )
     .execute(db_connection)
@@ -454,7 +503,9 @@ async fn credit_account(email: &str, amount: i64) -> Result<(), PaymentError> {
 //Error handling for submitPayment
 #[derive(Error, Debug)]
 pub enum PaymentError {
-    #[error("An error occured while adjusting expiry dates. Please try again and please notify us if this occurs again.")]
+    #[error(
+        "An error occured while adjusting expiry dates. Please try again and please notify us if this occurs again."
+    )]
     OverflowExpiry,
     #[error(
         "The sender of the transaction does not match the account's wallet on file. Please change the wallet associated with your account if this is in error."
@@ -470,6 +521,8 @@ pub enum PaymentError {
     AbiDecodingError,
     #[error("No destination for tx")]
     NoDestination,
+    #[error(transparent)]
+    SonicError(#[from] sonic_rs::Error),
     #[error("Transaction failed")]
     TxFailed,
     #[error(transparent)]
@@ -652,6 +705,7 @@ mod tests {
         };
 
         let ddrpc_client = reqwest::Client::builder()
+            .use_rustls_tls()
             .cookie_store(true)
             .build()
             .unwrap();
