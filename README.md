@@ -58,4 +58,4 @@ Example: postgres://username:password@localhost:5432/databasename
 ## Start the Server
 Once the database is set up and all the values are added to `.env`, you can start the server with `cargo run --release`. 
 
-To run with auth enabled, run `cargo run --release --features dev`. 
+To run auth with a localhost SIWE domain && use any contract with the payment processor for testing, run `cargo run --release --features dev`. 
