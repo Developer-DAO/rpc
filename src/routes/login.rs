@@ -182,7 +182,7 @@ pub mod tests {
     #[test]
     fn get_key() -> Result<(), Box<dyn std::error::Error>> {
         let key: String = HS256Key::generate().key().encode_hex();
-        // println!("{key:?}");
+        println!("{key:?}");
         HS256Key::from_bytes(&hex::decode(key)?);
         Ok(())
     }

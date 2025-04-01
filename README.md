@@ -47,10 +47,15 @@ Example: postgres://username:password@localhost:5432/databasename
 
 - run `sqlx migrate run`
 
-- generate JWT key by running the test called `get_key` in crate::routes::login and use as value of JWT_KEY in .env
+- run `cargo test routes::login::tests::get_key -- --show-output` to generate a JWT key, and the output as value of JWT_KEY in .env
 
 - add an email address for SMTP_USERNAME (it is probably best to make a new one or a temp)
 
 - add a password to that email for SMTP_PASSWORD
 
 - add a URL to any Ethereum JSON-RPC endpoint (local or otherwise) for ETHEREUM_ENDPOINT
+
+## Start the Server
+Once the database is set up and all the values are added to `.env`, you can start the server with `cargo run --release`. 
+
+To run auth with a localhost SIWE domain && use any contract with the payment processor for testing, run `cargo run --release --features dev`. 
