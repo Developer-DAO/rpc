@@ -47,7 +47,7 @@ Example: postgres://username:password@localhost:5432/databasename
 
 - run `sqlx migrate run`
 
-- generate JWT key by running the test called `get_key` in crate::routes::login and use as value of JWT_KEY in .env
+- run `cargo test routes::login::tests::get_key -- --show-output` to generate a JWT key, and the output as value of JWT_KEY in .env
 
 - add an email address for SMTP_USERNAME (it is probably best to make a new one or a temp)
 
