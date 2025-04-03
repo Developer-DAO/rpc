@@ -45,6 +45,7 @@ async fn main() {
     JWTKey::init().unwrap();
     Database::init().await.unwrap();
     Email::init().unwrap();
+
     tracing_subscriber::fmt()
         .with_span_events(FmtSpan::CLOSE)
         .with_max_level(tracing::Level::INFO)

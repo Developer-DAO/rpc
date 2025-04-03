@@ -16,7 +16,7 @@ use axum::{
     http::{HeaderMap, HeaderValue, StatusCode, header::SET_COOKIE},
     response::IntoResponse,
 };
-use jwt_simple::{algorithms::MACLike, reexports::coarsetime::Duration};
+use jwt_simple::{algorithms::MACLike, reexports::coarsetime::Duration, claims::JWTClaims};
 use serde::{Deserialize, Serialize};
 use siwe::{Message, VerificationError, VerificationOpts};
 use thiserror::Error;
@@ -175,7 +175,6 @@ impl IntoResponse for LoginError {
 
 #[cfg(test)]
 pub mod tests {
-
     use hex::ToHex;
     use jwt_simple::algorithms::{HS256Key, MACLike};
 

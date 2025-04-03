@@ -165,6 +165,20 @@ pub async fn get_calls_and_balance(
     Ok((StatusCode::OK, sonic_rs::to_string(&res)?).into_response())
 }
 
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PaymentData {
+    pub customeremail: String,
+    pub transactionhash: String,
+    pub asset: Asset,
+    pub amount: String,
+    pub chain: Chain,
+    pub date: i64,
+    pub usdvalue: i64,
+    pub decimals: i32,
+}
+
+
 pub async fn get_payments(
     Query(params): Query<Pagination>,
     Extension(jwt): Extension<JWTClaims<Claims>>,
@@ -183,6 +197,22 @@ pub async fn get_payments(
     )
     .fetch_all(RELATIONAL_DATABASE.get().unwrap())
     .await?;
+
+    let res: Vec<PaymentData> = res.into_iter()
+        .map(|e| {
+            PaymentData {
+                customeremail: e.customeremail,
+                transactionhash: e.transactionhash,
+                asset: e.asset,
+                amount: e.amount,
+                date: e.date.unix_timestamp(),
+                chain: e.chain,
+                usdvalue: e.usdvalue,
+                decimals: e.decimals,
+            }
+        })
+    .collect();
+    
     Ok((StatusCode::OK, sonic_rs::to_string(&res)?).into_response())
 }
 
@@ -197,6 +227,10 @@ pub async fn apply_payment_to_plan(
     )
     .fetch_one(RELATIONAL_DATABASE.get().unwrap())
     .await?;
+
+    if info.balance <= 0 {
+        Err(PaymentError::ZeroBalance)?;
+    }
 
     let plan_cost = payload.plan.get_cost();
     let total_cost = plan_cost as i64 * payload.duration as i64;
@@ -258,7 +292,7 @@ pub async fn process_ethereum_payment(
         matches!(payload.chain, Chain::Sepolia)
             .then(|| ())
             .ok_or_else(|| PaymentError::InvalidNetwork)?;
-        dotenvy::var("SEPOLIA_PROVIDER}").unwrap().leak()
+        dotenvy::var("SEPOLIA_PROVIDER").unwrap().leak()
     };
 
     let hash = hex::decode(&payload.hash)?;
@@ -503,6 +537,8 @@ async fn credit_account(email: &str, amount: i64) -> Result<(), PaymentError> {
 //Error handling for submitPayment
 #[derive(Error, Debug)]
 pub enum PaymentError {
+    #[error("Balance is zero or negative")]
+    ZeroBalance,
     #[error(
         "An error occured while adjusting expiry dates. Please try again and please notify us if this occurs again."
     )]
