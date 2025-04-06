@@ -6,7 +6,7 @@
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 cargo install sqlx-cli
 sudo apt update -y
-sudo apt install git jq docker.io clang openssl pkg-config libssl-dev -y
+sudo apt install git jq docker.io docker-buildx clang openssl pkg-config libssl-dev -y
 
 # TODO: Set up SSH key for repo or container pull
 git clone git@github.com:Developer-DAO/rpc.git
