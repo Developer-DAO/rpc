@@ -20,7 +20,7 @@ pub struct Dedup {
     pub email: String,
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(payload), fields(email = %payload.email))]
 pub async fn register_user(
     Json(payload): Json<RegisterUser>,
 ) -> Result<impl IntoResponse, RegisterUserError> {

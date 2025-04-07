@@ -12,11 +12,11 @@ use crate::{
 use alloy::{primitives::Address, providers::ProviderBuilder};
 use argon2::{Argon2, PasswordHash, PasswordVerifier};
 use axum::{
-    Json,
+    Extension, Json,
     http::{HeaderMap, HeaderValue, StatusCode, header::SET_COOKIE},
     response::IntoResponse,
 };
-use jwt_simple::{algorithms::MACLike, reexports::coarsetime::Duration, claims::JWTClaims};
+use jwt_simple::{algorithms::MACLike, claims::JWTClaims, reexports::coarsetime::Duration};
 use serde::{Deserialize, Serialize};
 use siwe::{Message, VerificationError, VerificationOpts};
 use thiserror::Error;
@@ -36,6 +36,43 @@ pub struct SiweLogin {
 }
 
 #[tracing::instrument]
+pub async fn refresh(
+    Extension(jwt): Extension<JWTClaims<Claims>>,
+) -> Result<impl IntoResponse, LoginError> {
+    let user = sqlx::query_as!(
+        Customers,
+        r#"SELECT email, wallet, password, role as "role!:Role", verificationCode, activated FROM Customers 
+        WHERE email = $1"#,
+        &jwt.custom.email,
+    )
+    .fetch_one(RELATIONAL_DATABASE.get().unwrap())
+    .await?;
+
+    let user_info = Claims {
+        role: user.role,
+        email: user.email,
+        wallet: user.wallet.map(|w| w.parse::<Address>().unwrap()),
+    };
+    let claims = jwt_simple::claims::Claims::with_custom_claims(user_info, Duration::from_hours(2));
+    let key = JWT_KEY.get().unwrap();
+    let auth = key.authenticate(claims)?;
+
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        SET_COOKIE,
+        HeaderValue::from_str(&format!("jwt={}", auth)).unwrap(),
+    );
+    headers.append(SET_COOKIE, HeaderValue::from_str("Secure").unwrap());
+    headers.append(SET_COOKIE, HeaderValue::from_str("HttpOnly").unwrap());
+    headers.append(
+        SET_COOKIE,
+        HeaderValue::from_str("SameSite=Strict").unwrap(),
+    );
+
+    Ok((StatusCode::OK, headers).into_response())
+}
+
+#[tracing::instrument(skip_all)]
 pub async fn user_login_siwe(Json(payload): Json<Siwe>) -> Result<impl IntoResponse, LoginError> {
     let msg: Message = payload.message.parse()?;
     let address = Address::new(msg.address);
@@ -92,7 +129,7 @@ pub async fn user_login_siwe(Json(payload): Json<Siwe>) -> Result<impl IntoRespo
     Ok((StatusCode::OK, headers))
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(payload), fields(email = %payload.email))]
 pub async fn user_login(
     Json(payload): Json<LoginRequest>,
 ) -> Result<impl IntoResponse, LoginError> {

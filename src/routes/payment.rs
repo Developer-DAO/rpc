@@ -220,6 +220,7 @@ pub async fn apply_payment_to_plan(
     Extension(jwt): Extension<JWTClaims<Claims>>,
     Json(payload): Json<ApplyPayment>,
 ) -> Result<impl IntoResponse, PaymentError> {
+    // todo: fix subscription upgrades
     let info = sqlx::query_as!(
         Balances,
         "SELECT balance from Customers where email = $1",
@@ -255,6 +256,7 @@ pub async fn apply_payment_to_plan(
     Ok((StatusCode::OK, "Successfully applied payment").into_response())
 }
 
+#[tracing::instrument]
 pub async fn process_ethereum_payment(
     Extension(jwt): Extension<JWTClaims<Claims>>,
     Json(payload): Json<EthereumPayment>,
@@ -352,8 +354,6 @@ pub async fn process_ethereum_payment(
     }
 
     let res: &Transaction = &res??;
-
-    println!("JWT Wallet Address: {:?}", &jwt.custom.wallet);
 
     if jwt.custom.wallet.is_none_or(|e| res.from != e) {
         Err(PaymentError::SenderWalletMismatch)?

@@ -15,6 +15,7 @@ pub struct Credits {
     planexpiration: Option<OffsetDateTime>,
 }
 
+#[tracing::instrument]
 pub async fn validate_subscription_and_update_user_calls(
     Path(key): Path<[String; 2]>,
     request: Request,

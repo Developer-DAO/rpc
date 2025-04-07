@@ -7,13 +7,12 @@ edition = "2024"
 
 [dependencies]
 argon2 = "0.5.2"
-axum = "0.7.4"
+axum = "0.8.3"
 dotenvy = "0.15.7"
 hex = "0.4.3"
 jwt-simple = { version = "0.12.7", default-features = false, features = ["pure-rust"] }
 lettre = {version = "0.11.4", features = ["rustls-tls"]}
 rand = "0.8.5"
-reqwest = {version = "0.11.23", features = ["json", "rustls-tls", "cookies"]}
 secp256k1 = {version = "0.28.2", features = ["rand", "global-context"]}
 serde = {version = "1.0.195", features = ["derive"]}
 siwe = { git = "https://github.com/crypdoughdoteth/siwe-rs", rev = "9f4a603a7dddb26f4fdabfde563927f856ff3405", features = ["alloy", "serde"] }
@@ -27,6 +26,11 @@ tracing = "0.1.40"
 tracing-subscriber = "0.3.18"
 alloy = {version = "0.2.0", features = ["node-bindings", "network", "rpc-types"]}
 thiserror = "1.0.63"
+mimalloc = "0.1.45"
+hyper = "1.6.0"
+hyper-util = { version = "0.1", features = ["full"] }
+reqwest = {version = "0.12.5", features = ["json", "rustls-tls", "cookies", "stream"]}
+http-body-util = "0.1"
 
 [dev-dependencies]
 alloy = {version = "0.2.0", features = ["node-bindings", "network", "rpc-types", "signer-local"]}
@@ -35,4 +39,8 @@ alloy = {version = "0.2.0", features = ["node-bindings", "network", "rpc-types",
 dev = []
 
 [profile.release]
-debug = true
+# debug = true
+lto = "fat"
+codegen-units = 1
+opt-level = "z"
+strip = "debuginfo"
