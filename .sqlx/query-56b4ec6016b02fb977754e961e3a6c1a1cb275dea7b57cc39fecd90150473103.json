@@ -1,0 +1,50 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT email, wallet, nonce, role as \"role!: Role\" FROM Customers where wallet = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "email",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "wallet",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "nonce",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "role!: Role",
+        "type_info": {
+          "Custom": {
+            "name": "role",
+            "kind": {
+              "Enum": [
+                "normie",
+                "admin"
+              ]
+            }
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "56b4ec6016b02fb977754e961e3a6c1a1cb275dea7b57cc39fecd90150473103"
+}
