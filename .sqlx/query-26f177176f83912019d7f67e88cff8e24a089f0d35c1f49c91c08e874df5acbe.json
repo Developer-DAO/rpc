@@ -1,0 +1,90 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT customerEmail, transactionHash, asset as \"asset!: Asset\",\n        amount, decimals, chain as \"chain!: Chain\", date, usdValue\n        FROM Payments WHERE customerEmail = $1 \n        LIMIT $2 \n        OFFSET $3\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "customeremail",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "transactionhash",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "asset!: Asset",
+        "type_info": {
+          "Custom": {
+            "name": "asset",
+            "kind": {
+              "Enum": [
+                "ether",
+                "usdc"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "amount",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "decimals",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 5,
+        "name": "chain!: Chain",
+        "type_info": {
+          "Custom": {
+            "name": "chain",
+            "kind": {
+              "Enum": [
+                "optimism",
+                "polygon",
+                "arbitrum",
+                "base",
+                "anvil",
+                "sepolia"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "date",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 7,
+        "name": "usdvalue",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "26f177176f83912019d7f67e88cff8e24a089f0d35c1f49c91c08e874df5acbe"
+}

@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE Customers SET verificationCode = $1, password = $3, activated = true WHERE email = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Text",
+        "Varchar"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1075efdc4c5a5f903032f8374c292467181b3308cacba6b8a66ab83f37a0767d"
+}

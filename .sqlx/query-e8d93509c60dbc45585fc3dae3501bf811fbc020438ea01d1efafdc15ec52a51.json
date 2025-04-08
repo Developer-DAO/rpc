@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT planexpiration, calls, email, plan as \"plan!: Plan\"\n        FROM Customers\n        WHERE Customers.email = (SELECT customerEmail FROM Api WHERE apiKey = $1)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "planexpiration",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 1,
+        "name": "calls",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "email",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "plan!: Plan",
+        "type_info": {
+          "Custom": {
+            "name": "plan",
+            "kind": {
+              "Enum": [
+                "free",
+                "tier1",
+                "tier2",
+                "tier3"
+              ]
+            }
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "e8d93509c60dbc45585fc3dae3501bf811fbc020438ea01d1efafdc15ec52a51"
+}

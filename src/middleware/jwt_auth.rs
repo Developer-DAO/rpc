@@ -50,7 +50,7 @@ pub enum JwtAuthError {
 impl IntoResponse for JwtAuthError {
     fn into_response(self) -> Response {
         (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            axum::http::StatusCode::UNAUTHORIZED,
             self.to_string(),
         )
             .into_response()

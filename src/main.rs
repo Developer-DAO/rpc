@@ -23,7 +23,7 @@ use axum::{
 };
 use database::types::Database;
 use dotenvy::dotenv;
-use routes::login::user_login_siwe;
+use routes::login::{refresh, user_login_siwe};
 use routes::payment::{
     apply_payment_to_plan, get_calls_and_balance, get_payments, process_ethereum_payment,
 };
@@ -32,11 +32,16 @@ use tokio::net::TcpListener;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::info;
 use tracing_subscriber::fmt::format::FmtSpan;
+use mimalloc::MiMalloc;
+
 pub mod database;
 pub mod eth_rpc;
 pub mod json_rpc;
 pub mod middleware;
 pub mod routes;
+
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
 
 #[tokio::main]
 async fn main() {
@@ -45,6 +50,7 @@ async fn main() {
     JWTKey::init().unwrap();
     Database::init().await.unwrap();
     Email::init().unwrap();
+
     tracing_subscriber::fmt()
         .with_span_events(FmtSpan::CLOSE)
         .with_max_level(tracing::Level::INFO)
@@ -63,13 +69,13 @@ async fn main() {
         .allow_headers([header::CONTENT_TYPE]);
 
     let relayer = Router::new()
-        .route("/rpc/:chain/:api_key", post(route_call))
+        .route("/rpc/{chain}/{api_key}", post(route_call))
         .route_layer(from_fn(validate_subscription_and_update_user_calls))
         .layer(cors_rpc);
 
     let api_keys = Router::new()
         .route("/api/keys", get(get_all_api_keys).post(generate_api_keys))
-        .route("/api/keys/:key", delete(delete_key))
+        .route("/api/keys/{key}", delete(delete_key))
         .route_layer(from_fn(verify_jwt));
     let payments = Router::new()
         .route("/api/pay/eth", post(process_ethereum_payment))
@@ -78,6 +84,7 @@ async fn main() {
         .route("/api/payments", get(get_payments))
         .route_layer(from_fn(verify_jwt));
     let siwe = Router::new()
+        .route("/api/refresh", post(refresh))
         .route("/api/siwe/nonce", get(get_siwe_nonce))
         .route("/api/siwe/add_wallet", post(siwe_add_wallet))
         .route_layer(from_fn(verify_jwt));
@@ -92,7 +99,7 @@ async fn main() {
         .route("/api/login", post(user_login))
         .route("/api/login/siwe", post(user_login_siwe))
         .route("/api/recovery", post(update_password))
-        .route("/api/recovery/:email", get(recover_password_email))
+        .route("/api/recovery/{email}", get(recover_password_email))
         .merge(api_keys)
         .merge(siwe)
         .merge(payments)

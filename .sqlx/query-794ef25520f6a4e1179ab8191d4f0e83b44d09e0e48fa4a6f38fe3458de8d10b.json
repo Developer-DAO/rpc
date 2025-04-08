@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO Api (customerEmail, apiKey) VALUES ($1, $2)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Varchar"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "794ef25520f6a4e1179ab8191d4f0e83b44d09e0e48fa4a6f38fe3458de8d10b"
+}

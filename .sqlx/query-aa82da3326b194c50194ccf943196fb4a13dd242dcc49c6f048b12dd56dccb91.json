@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE Customers SET balance = balance - $1, plan = $2, planExpiration = $3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        {
+          "Custom": {
+            "name": "plan",
+            "kind": {
+              "Enum": [
+                "free",
+                "tier1",
+                "tier2",
+                "tier3"
+              ]
+            }
+          }
+        },
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "aa82da3326b194c50194ccf943196fb4a13dd242dcc49c6f048b12dd56dccb91"
+}

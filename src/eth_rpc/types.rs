@@ -29,14 +29,3 @@ impl InternalEndpoints {
         }
     }
 }
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Provider {
-    pub url: reqwest::Url,
-}
-
-impl Provider {
-    pub fn new(url: reqwest::Url) -> Provider {
-        Self { url }
-    }
-}

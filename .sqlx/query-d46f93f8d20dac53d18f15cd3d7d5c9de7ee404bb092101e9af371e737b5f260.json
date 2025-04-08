@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT apiKey FROM Api where customerEmail = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "apikey",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "d46f93f8d20dac53d18f15cd3d7d5c9de7ee404bb092101e9af371e737b5f260"
+}
