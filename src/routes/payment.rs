@@ -24,12 +24,7 @@ use axum::{Json, response::IntoResponse};
 use jwt_simple::claims::JWTClaims;
 use serde::{Deserialize, Serialize};
 use sqlx::types::time::OffsetDateTime;
-#[cfg(not(feature = "dev"))]
-use std::collections::HashMap;
 use std::num::ParseFloatError;
-#[cfg(not(test))]
-#[cfg(not(feature = "dev"))]
-use std::sync::LazyLock;
 #[cfg(test)]
 use std::sync::OnceLock;
 use thiserror::Error;
@@ -69,11 +64,11 @@ impl TokenDetails {
 }
 
 #[cfg(test)]
-static TEST_TOKEN: OnceLock<HashMap<Address, TokenDetails>> = OnceLock::new();
+static TEST_TOKEN: OnceLock<std::collections::HashMap<Address, TokenDetails>> = OnceLock::new();
 #[cfg(not(test))]
 #[cfg(not(feature = "dev"))]
-static TOKENS: LazyLock<HashMap<Address, TokenDetails>> = LazyLock::new(|| {
-    let mut map = HashMap::new();
+static TOKENS: std::sync::LazyLock<std::collections::HashMap<Address, TokenDetails>> = std::sync::LazyLock::new(|| {
+    let mut map = std::collections::HashMap::new();
     map.insert(
         address!("af88d065e77c8cc2239327c5edb3a432268e5831"),
         TokenDetails::new(6, Chain::Arbitrum, Asset::USDC),
@@ -263,7 +258,7 @@ pub async fn process_ethereum_payment(
 ) -> Result<impl IntoResponse, PaymentError> {
     #[cfg(not(test))]
     #[cfg(not(feature = "dev"))]
-    let endpoint: &'static str = ETHEREUM_ENDPOINT
+    let _endpoint: &'static str = ETHEREUM_ENDPOINT
         .iter()
         .find(|e| {
             matches!(
@@ -287,10 +282,10 @@ pub async fn process_ethereum_payment(
         .as_str();
 
     #[cfg(test)]
-    let endpoint: &'static str = TESTING_ENDPOINT.get().unwrap();
+    let _endpoint: &'static str = TESTING_ENDPOINT.get().unwrap();
 
     #[cfg(feature = "dev")]
-    let endpoint: &'static str = {
+    let _endpoint: &'static str = {
         matches!(payload.chain, Chain::Sepolia)
             .then(|| ())
             .ok_or_else(|| PaymentError::InvalidNetwork)?;
@@ -303,7 +298,7 @@ pub async fn process_ethereum_payment(
 
     let res: tokio::task::JoinHandle<Result<Transaction, PaymentError>> = {
         tokio::spawn(async move {
-            let eth = reqwest::Url::parse(endpoint).unwrap();
+            let eth = reqwest::Url::parse(_endpoint).unwrap();
             let provider = ProviderBuilder::new().on_http(eth);
             provider
                 .get_transaction_by_hash(FixedBytes::from(&fixed))
@@ -314,7 +309,7 @@ pub async fn process_ethereum_payment(
 
     let receipt: tokio::task::JoinHandle<Result<TransactionReceipt, PaymentError>> = {
         tokio::spawn(async move {
-            let eth = reqwest::Url::parse(endpoint).unwrap();
+            let eth = reqwest::Url::parse(_endpoint).unwrap();
             let provider = ProviderBuilder::new().on_http(eth);
             provider
                 .get_transaction_receipt(FixedBytes::from(&fixed))
@@ -325,7 +320,7 @@ pub async fn process_ethereum_payment(
 
     let last_safe_block: tokio::task::JoinHandle<Result<u64, PaymentError>> = {
         tokio::spawn(async move {
-            let eth = reqwest::Url::parse(endpoint).unwrap();
+            let eth = reqwest::Url::parse(_endpoint).unwrap();
             let provider = ProviderBuilder::new().on_http(eth);
             provider
                 .get_block(BlockId::safe(), BlockTransactionsKind::Full)
@@ -394,8 +389,10 @@ pub async fn process_ethereum_payment(
             } else {
                 Err(PaymentError::AbiDecodingError)?
             };
+
             #[cfg(not(feature = "dev"))]
-            let token_address = res.to.ok_or_else(|| PaymentError::UnsupportedToken)?;
+            let _token_address = res.to.ok_or_else(|| PaymentError::UnsupportedToken)?;
+
             let (amount, to) = match decoded {
                 Transfer::Transfer(tx) => (tx.amount, tx.to),
                 Transfer::TransferFrom(tx) => match jwt.custom.wallet {
@@ -408,53 +405,57 @@ pub async fn process_ethereum_payment(
                     None => Err(PaymentError::AddressMismatch)?,
                 },
             };
+
             if to != WALLET {
                 Err(PaymentError::IncorrectRecipient)?
             }
+            
+            #[cfg(feature = "dev")]
+            let _token_address = Address::new([0u8;20]);
 
             #[cfg(not(test))]
             #[cfg(not(feature = "dev"))]
-            let token = *TOKENS
-                .get(&token_address)
+            let _token = *TOKENS
+                .get(&_token_address)
                 .ok_or_else(|| PaymentError::UnsupportedToken)?;
 
             #[cfg(test)]
-            let token = *TEST_TOKEN
+            let _token = *TEST_TOKEN
                 .get()
                 .unwrap()
-                .get(&token_address)
+                .get(&_token_address)
                 .ok_or_else(|| PaymentError::UnsupportedToken)?;
 
             #[cfg(feature = "dev")]
-            let token = TokenDetails {
+            let _token = TokenDetails {
                 decimals: 18,
                 network: Chain::Sepolia,
                 asset: Asset::USDC,
             };
 
-            match token.asset {
+            match _token.asset {
                 Asset::Ether => Err(PaymentError::UnsupportedToken)?,
                 Asset::USDC => {}
             }
 
             println!("Calculating credits from token ...");
-            let value = calculate_token_value(token.asset, amount, token.decimals).await?;
+            let value = calculate_token_value(_token.asset, amount, _token.decimals).await?;
             println!("Raw Value {}", value);
 
             info!("USD amount paid: {}", value,);
 
-            let usdvalue: String = format_units(value, token.decimals)?;
+            let usdvalue: String = format_units(value, _token.decimals)?;
             println!("USD_VALUE {}", usdvalue);
             let usdvalue = (usdvalue.parse::<f64>()? * 100.0) as i64;
 
             Payments {
                 customeremail: jwt.custom.email,
                 transactionhash: hex::encode(hash),
-                asset: token.asset,
+                asset: _token.asset,
                 amount: amount.to_string(),
                 chain: payload.chain,
                 date: OffsetDateTime::now_utc(),
-                decimals: token.decimals as i32,
+                decimals: _token.decimals as i32,
                 usdvalue,
             }
         }
@@ -653,7 +654,7 @@ mod tests {
         let addy = *contract.address();
         println!("Contract address: {addy}");
         TEST_TOKEN.get_or_init(|| {
-            let mut map = HashMap::new();
+            let mut map = std::collections::HashMap::new();
             map.insert(addy, TokenDetails::new(18, Chain::Optimism, Asset::USDC));
             map
         });
