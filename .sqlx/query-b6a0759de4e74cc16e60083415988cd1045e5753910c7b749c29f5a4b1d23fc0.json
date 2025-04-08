@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM Payments WHERE customerEmail = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b6a0759de4e74cc16e60083415988cd1045e5753910c7b749c29f5a4b1d23fc0"
+}
