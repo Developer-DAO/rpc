@@ -1,5 +1,5 @@
-use crate::json_rpc::types::JsonRpcRequest;
-use reqwest::Client;
+use axum::{body::Body, extract::Request, response::Response};
+use hyper::body::Incoming;
 use std::{
     fmt::{self, Display, Formatter},
     future::Future,
@@ -13,8 +13,8 @@ pub static GATEWAY_ENDPOINT: LazyLock<&'static str> =
 pub trait Relayer {
     fn relay_transaction(
         &self,
-        body: &JsonRpcRequest,
-    ) -> impl Future<Output = Result<String, RelayErrors>>;
+        request: Request<Body>,
+    ) -> impl Future<Output = Result<Response<Incoming>, RelayErrors>>;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -176,19 +176,6 @@ impl PoktChains {
             PoktChains::ZkLink => "F02A",
             PoktChains::ZkSyncEra => "F02B",
         }
-    }
-}
-
-impl Relayer for PoktChains {
-    async fn relay_transaction(&self, body: &JsonRpcRequest) -> Result<String, RelayErrors> {
-        Ok(Client::new()
-            .post(*GATEWAY_ENDPOINT)
-            .header("target-service-id", self.id())
-            .json(body)
-            .send()
-            .await?
-            .text()
-            .await?)
     }
 }
 
