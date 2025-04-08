@@ -12,7 +12,7 @@ RUN cargo chef cook --release --recipe-path recipe.json
 # Build application
 COPY . .
 #RUN cargo build --release --bin app
-#RUN cargo install sqlx-cli
+RUN cargo install sqlx-cli
 RUN cargo build --release
 
-ENTRYPOINT ["cargo", "run", "--release"]
+ENTRYPOINT ["cargo", "run", "--release", "--features", "dev"]
