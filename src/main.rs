@@ -39,6 +39,7 @@ pub mod eth_rpc;
 pub mod json_rpc;
 pub mod middleware;
 pub mod routes;
+pub mod proxy;
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;

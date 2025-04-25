@@ -6,7 +6,6 @@ use axum::{
 };
 use thiserror::Error;
 use time::OffsetDateTime;
-use tokio::join;
 
 pub struct Credits {
     calls: i64,
@@ -22,6 +21,9 @@ pub async fn validate_subscription_and_update_user_calls(
     next: Next,
 ) -> Result<impl IntoResponse, RpcAuthErrors> {
     let db_connection = RELATIONAL_DATABASE.get().unwrap();
+    
+    // replace with cache read + cache refresh
+
     let sub_info: Credits = sqlx::query_as!(
         Credits,
         r#"SELECT planexpiration, calls, email, plan as "plan!: Plan"
@@ -50,7 +52,9 @@ pub async fn validate_subscription_and_update_user_calls(
         }
     }
 
-    let inc = tokio::spawn(async move {
+    tokio::spawn(async move {
+        // todo: cache write
+        // doesn't block the next request running + completing
         sqlx::query!(
             // atomically decriment the credits field
             "UPDATE Customers SET calls = calls + 1 WHERE email = $1",
@@ -59,13 +63,8 @@ pub async fn validate_subscription_and_update_user_calls(
         .execute(db_connection)
         .await
     });
-    let ret = tokio::spawn(async { next.run(request).await });
 
-    let (res, inc) = join!(ret, inc);
-
-    inc.unwrap()?;
-
-    Ok(res.unwrap())
+    Ok(next.run(request).await)
 }
 
 #[derive(Debug, Error)]

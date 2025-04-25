@@ -10,12 +10,12 @@ use std::{
 pub static GATEWAY_ENDPOINT: LazyLock<&'static str> =
     LazyLock::new(|| format!("{}/v1", dotenvy::var("GATEWAY_URL").unwrap()).leak());
 
-pub trait Relayer {
-    fn relay_transaction(
-        &self,
-        request: Request<Body>,
-    ) -> impl Future<Output = Result<Response<Incoming>, RelayErrors>>;
-}
+// pub trait Relayer {
+//     fn relay_transaction(
+//         &self,
+//         request: Request<Body>,
+//     ) -> impl Future<Output = Result<Response<Incoming>, RelayErrors>>;
+// }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum PoktChains {

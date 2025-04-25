@@ -1,16 +1,28 @@
 {
   "configurations": {
-    "<name>: Launch": {
+    "CodeLLDB: Launch": {
       "adapter": "CodeLLDB",
       "configuration": {
-        "name": "<name>",
-        "type": "lldb",
+        "name": "D_D Cloud",
+        "type": "lldb-dap",
         "request": "launch",
-        "program": "${workspaceRoot}/target/debug/deps/dd_rpc-e8b47914113cbd98",
+        "program": "${workspaceRoot}/target/debug/deps/dd_rpc-069c9c6e65aa3780",
         "cwd": "${workspaceRoot}",
         "externalConsole": true,
         "stopAtEntry": true,
-        "MIMode": "gdb"
+        "MIMode": "lldb"
+      }
+    }, 
+    "Vscode-Cpptools: Launch": {
+      "adapter": "vscode-cpptools",
+      "configuration": {
+        "name": "D_D Cloud",
+        "request": "launch",
+        "program": "${workspaceRoot}/target/debug/deps/dd_rpc-069c9c6e65aa3780",
+        "cwd": "${workspaceRoot}",
+        "externalConsole": true,
+        "stopAtEntry": true,
+        "MIMode": "lldb"
       }
     }
   }

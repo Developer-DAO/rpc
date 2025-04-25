@@ -1,15 +1,14 @@
 use super::types::RelayErrors;
-use crate::routes::relayer::types::{PoktChains, Relayer};
+use crate::{proxy::client::ProxyClient, routes::relayer::types::PoktChains};
 use axum::{
-    body::Body,
+    body::{Body, Bytes},
     extract::{Path, Request},
     http::{HeaderValue, StatusCode},
     response::{IntoResponse, Response},
 };
-use hyper::{Request as HyperRequest, body::Incoming, header::HOST};
-use hyper_util::rt::TokioIo;
+use http_body_util::BodyExt;
+use hyper::{Method, Request as HyperRequest, body::Incoming, header::HOST};
 use thiserror::Error;
-use tracing::info;
 
 pub async fn route_call(
     Path(route_info): Path<[String; 2]>,
@@ -23,60 +22,16 @@ pub async fn route_call(
     Ok(result)
 }
 
-impl Relayer for PoktChains {
+impl PoktChains {
     async fn relay_transaction(
         &self,
         req: Request<Body>,
     ) -> Result<Response<Incoming>, RelayErrors> {
-        let (mut parts, body) = req.into_parts();
-
-        // Parse our URL...
-        let url = dotenvy::var("SEPOLIA_PROVIDER")
-            .unwrap()
-            .parse::<hyper::Uri>()
-            .unwrap();
-
-        // Get the host and the port
-        let host = url.host().expect("uri has no host");
-        let port = url.port_u16().unwrap_or(80);
-
-        let address = format!("{}:{}", host, port);
-
-        // Open a TCP connection to the remote host
-        let stream = tokio::net::TcpStream::connect(address).await.unwrap();
-
-        // Use an adapter to access something implementing `tokio::io` traits as if they implement
-        // `hyper::rt` IO traits.
-        let io = TokioIo::new(stream);
-
-        // Create the Hyper client
-        let (mut sender, conn) = hyper::client::conn::http1::handshake(io).await.unwrap();
-
-        // Spawn a task to poll the connection, driving the HTTP state
-        tokio::task::spawn(async move {
-            if let Err(err) = conn.await {
-                println!("Connection failed: {:?}", err);
-            }
-        });
-
-        let authority = url.authority().unwrap().clone();
-
-        // Create an HTTP request with an empty body and a HOST header
-        let mut req = HyperRequest::builder()
-            .method(parts.method)
-            .uri(url)
-            .body(body)
-            .unwrap();
-
-        parts
-            .headers
-            .insert(HOST, HeaderValue::from_str(authority.as_str()).unwrap());
-        *req.headers_mut() = parts.headers;
-
-        info!(name = "RequestInfo", "{:?}", req);
-
-        // Await the response...
-        Ok(sender.send_request(req).await.unwrap())
+        let (parts, body) = req.into_parts();
+        let body = body.collect().await.unwrap().to_bytes();
+        let nr = Request::from_parts(parts, body);
+        let client = ProxyClient::new(nr);
+        Ok(client.exec_request().await.unwrap())
     }
 }
 

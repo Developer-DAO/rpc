@@ -38,6 +38,10 @@ alloy = {version = "0.2.0", features = ["node-bindings", "network", "rpc-types",
 [features]
 dev = []
 
+[profile.dev]
+opt-level = 0
+debug = true
+
 [profile.release]
 # debug = true
 lto = "fat"
