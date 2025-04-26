@@ -7,14 +7,20 @@ CREATE TABLE IF NOT EXISTS Customers (
     email VARCHAR(255) NOT NULL PRIMARY KEY,
     wallet VARCHAR(42) UNIQUE,
     password VARCHAR(120) NOT NULL,
-    role ROLE NOT NULL,
-    plan PLAN NOT NULL,
-    planExpiration TIMESTAMPTZ,
+    role ROLE NOT NULL default 'normie',
     verificationCode VARCHAR(10) NOT NULL,
-    calls BIGINT NOT NULL,
-    nonce TEXT,
-    balance BIGINT NOT NULL,
+    nonce TEXT NOT NULL,
+    balance BIGINT CHECK (balance >= 0) NOT NULL default 0,
+    created TIMESTAMPTZ GENERATED ALWAYS AS(('now'::timestamptz AT TIME ZONE 'UTC')) STORED NOT NULL,
     activated bool NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS RpcPlans (
+    email VARCHAR(255) NOT NULL PRIMARY KEY,
+    calls BIGINT CHECK (calls >= 0) NOT NULL default 0,
+    plan PLAN NOT NULL DEFAULT 'free',
+    created TIMESTAMPTZ GENERATED ALWAYS AS(('now'::timestamptz AT TIME ZONE 'UTC')) STORED NOT NULL,
+    expires TIMESTAMPTZ GENERATED ALWAYS AS(('now'::timestamptz AT TIME ZONE 'UTC') + INTERVAL '1 months') STORED NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS Api (
@@ -29,10 +35,10 @@ CREATE TABLE IF NOT EXISTS Payments (
     asset ASSET NOT NULL, 
     amount TEXT NOT NULL,
     -- must know precision for storing the raw amounts as bigint
-    decimals INT NOT NULL,
+    decimals INT CHECK(decimals > 0) NOT NULL,
     chain CHAIN NOT NULL,
-    date TIMESTAMPTZ NOT NULL,
-    usdValue BIGINT NOT NULL
+    date TIMESTAMPTZ GENERATED ALWAYS AS(('now'::timestamptz AT TIME ZONE 'UTC')) STORED NOT NULL,
+    usdValue BIGINT CHECK(usdValue > 0) NOT NULL
 );
 
 -- SELECT asset, amount, chain, date, transactionHash FROM Payments where customerEmail = $1 AND data > $2 

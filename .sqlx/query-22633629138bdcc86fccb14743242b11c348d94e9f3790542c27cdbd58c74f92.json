@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "INSERT INTO Payments(customerEmail, transactionHash, asset, amount, chain, date, decimals, usdValue) \n            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+  "query": "INSERT INTO Payments(customerEmail, transactionHash, asset, amount, chain, decimals, usdValue) \n            VALUES ($1, $2, $3, $4, $5, $6, $7)",
   "describe": {
     "columns": [],
     "parameters": {
@@ -34,12 +34,11 @@
             }
           }
         },
-        "Timestamptz",
         "Int4",
         "Int8"
       ]
     },
     "nullable": []
   },
-  "hash": "17955565275e939b538b2b1140a08baac3291971c54799d41a5e1f7aa43542d2"
+  "hash": "22633629138bdcc86fccb14743242b11c348d94e9f3790542c27cdbd58c74f92"
 }

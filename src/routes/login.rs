@@ -60,7 +60,7 @@ pub async fn refresh(
     let mut headers = HeaderMap::new();
     headers.insert(
         SET_COOKIE,
-        HeaderValue::from_str(&format!("jwt={}", auth)).unwrap(),
+        HeaderValue::from_str(&format!("jwt={auth}")).unwrap(),
     );
     headers.append(SET_COOKIE, HeaderValue::from_str("Secure").unwrap());
     headers.append(SET_COOKIE, HeaderValue::from_str("HttpOnly").unwrap());
@@ -117,7 +117,7 @@ pub async fn user_login_siwe(Json(payload): Json<Siwe>) -> Result<impl IntoRespo
     let mut headers = HeaderMap::new();
     headers.insert(
         SET_COOKIE,
-        HeaderValue::from_str(&format!("jwt={}", auth)).unwrap(),
+        HeaderValue::from_str(&format!("jwt={auth}")).unwrap(),
     );
     headers.append(SET_COOKIE, HeaderValue::from_str("Secure").unwrap());
     headers.append(SET_COOKIE, HeaderValue::from_str("HttpOnly").unwrap());
@@ -166,7 +166,7 @@ pub async fn user_login(
     let mut headers = HeaderMap::new();
     headers.insert(
         SET_COOKIE,
-        HeaderValue::from_str(&format!("jwt={}", auth)).unwrap(),
+        HeaderValue::from_str(&format!("jwt={auth}")).unwrap(),
     );
     headers.append(SET_COOKIE, HeaderValue::from_str("Secure").unwrap());
     headers.append(SET_COOKIE, HeaderValue::from_str("HttpOnly").unwrap());

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "UPDATE Customers SET calls = calls + 1 WHERE email = $1",
+  "query": "UPDATE RpcPlans SET calls = calls + 1 WHERE email = $1",
   "describe": {
     "columns": [],
     "parameters": {
@@ -10,5 +10,5 @@
     },
     "nullable": []
   },
-  "hash": "c03351a6a1364a05b4e30c1d922e2b9f6760647fe4c30968c18ea18431072251"
+  "hash": "e10679b59c1bf62174f6d64ba3ca1b3592143dfb5da2a34d6f6266a42499b677"
 }

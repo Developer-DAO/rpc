@@ -28,7 +28,6 @@ use std::num::ParseFloatError;
 #[cfg(test)]
 use std::sync::OnceLock;
 use thiserror::Error;
-use time::ext::NumericalDuration;
 use tokio::task::JoinError;
 use tracing::info;
 
@@ -150,8 +149,10 @@ pub async fn get_calls_and_balance(
     let res = sqlx::query_as!(
         UserBalances,
         "SELECT calls, balance 
-        FROM Customers 
-        where email = $1",
+        FROM Customers, RpcPlans 
+        where Customers.email = $1 
+        AND 
+        RpcPlans.email = $1",
         jwt.custom.email
     )
     .fetch_one(RELATIONAL_DATABASE.get().unwrap())
@@ -231,19 +232,27 @@ pub async fn apply_payment_to_plan(
     let plan_cost = payload.plan.get_cost();
     let total_cost = plan_cost as i64 * payload.duration as i64;
 
-    let new_expiry = OffsetDateTime::now_utc()
-        .checked_add((30 * payload.duration as i64).days())
-        .ok_or_else(|| PaymentError::OverflowExpiry)?;
-
     if total_cost <= info.balance {
-        sqlx::query!(
-            "UPDATE Customers SET balance = balance - $1, plan = $2, planExpiration = $3",
-            total_cost,
-            payload.plan as Plan,
-            new_expiry
-        )
-        .execute(RELATIONAL_DATABASE.get().unwrap())
-        .await?;
+        tokio::spawn(async move { 
+            let mut tx = RELATIONAL_DATABASE.get().unwrap().begin().await?;
+            sqlx::query!(
+                 "UPDATE Customers SET balance = balance - $1 WHERE Customers.email = $2",
+                 total_cost,
+                 &jwt.custom.email
+             )
+            .execute(&mut *tx)
+            .await?;
+
+            sqlx::query!(
+                 "UPDATE RpcPlans SET plan = $1 WHERE email = $2 ",
+                 payload.plan as Plan,
+                 &jwt.custom.email
+             )
+            .execute(&mut *tx)
+            .await?;
+            tx.commit().await?;
+            Ok::<(), PaymentError>(())
+        });
     } else {
         Err(PaymentError::InsufficientFunds)?
     }
@@ -440,12 +449,12 @@ pub async fn process_ethereum_payment(
 
             println!("Calculating credits from token ...");
             let value = calculate_token_value(_token.asset, amount, _token.decimals).await?;
-            println!("Raw Value {}", value);
+            println!("Raw Value {value}");
 
-            info!("USD amount paid: {}", value,);
+            info!("USD amount paid: {value}");
 
             let usdvalue: String = format_units(value, _token.decimals)?;
-            println!("USD_VALUE {}", usdvalue);
+            println!("USD_VALUE {usdvalue}");
             let usdvalue = (usdvalue.parse::<f64>()? * 100.0) as i64;
 
             Payments {
@@ -485,11 +494,7 @@ async fn calculate_token_value(
     decimals: u8,
 ) -> Result<U256, PaymentError> {
     let price: PriceData = reqwest::Client::new()
-        .get(format!(
-            "https://api.coinbase.com/v2/prices/{}-USD/spot",
-            asset,
-        ))
-        .send()
+        .get(format!("https://api.coinbase.com/v2/prices/{asset}-USD/spot")).send()
         .await?
         .json::<PriceData>()
         .await?;
@@ -502,14 +507,13 @@ async fn insert_payment(payment: &Payments) -> Result<(), PaymentError> {
     // append only -- isolated
     let db_connection = RELATIONAL_DATABASE.get().unwrap();
     sqlx::query!(
-        "INSERT INTO Payments(customerEmail, transactionHash, asset, amount, chain, date, decimals, usdValue) 
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+        "INSERT INTO Payments(customerEmail, transactionHash, asset, amount, chain, decimals, usdValue) 
+            VALUES ($1, $2, $3, $4, $5, $6, $7)",
         payment.customeremail,
         payment.transactionhash,
         payment.asset as crate::database::types::Asset,
         payment.amount,
         payment.chain as crate::database::types::Chain,
-        payment.date,
         payment.decimals as i32,
         payment.usdvalue
         
@@ -522,13 +526,13 @@ async fn insert_payment(payment: &Payments) -> Result<(), PaymentError> {
 async fn credit_account(email: &str, amount: i64) -> Result<(), PaymentError> {
     // only updates account balance based on transaction
     let db_connection = RELATIONAL_DATABASE.get().unwrap();
-    let transaction = db_connection.begin().await?;
+    let mut transaction = db_connection.begin().await?;
     sqlx::query!(
         "UPDATE Customers SET balance = balance + $1 where email = $2",
         amount,
         email,
     )
-    .execute(db_connection)
+    .execute(&mut *transaction)
     .await?;
     transaction.commit().await?;
 

@@ -6,13 +6,12 @@ use axum::{
 };
 use thiserror::Error;
 use time::OffsetDateTime;
-use tokio::join;
 
 pub struct Credits {
     calls: i64,
     email: String,
     plan: Plan,
-    planexpiration: Option<OffsetDateTime>,
+    expires: OffsetDateTime,
 }
 
 #[tracing::instrument]
@@ -24,9 +23,12 @@ pub async fn validate_subscription_and_update_user_calls(
     let db_connection = RELATIONAL_DATABASE.get().unwrap();
     let sub_info: Credits = sqlx::query_as!(
         Credits,
-        r#"SELECT planexpiration, calls, email, plan as "plan!: Plan"
-        FROM Customers
-        WHERE Customers.email = (SELECT customerEmail FROM Api WHERE apiKey = $1)"#,
+        r#"
+        SELECT email, calls, plan as "plan!: Plan", expires
+        FROM RpcPlans
+        WHERE 
+        email = (SELECT customerEmail FROM Api WHERE apiKey = $1) 
+        "#,
         key.get(1).ok_or_else(|| RpcAuthErrors::InvalidApiKey)?
     )
     .fetch_optional(db_connection)
@@ -34,38 +36,27 @@ pub async fn validate_subscription_and_update_user_calls(
     .ok_or_else(|| RpcAuthErrors::InvalidApiKey)?;
 
     // check callcount
-    if sub_info.calls >= sub_info.plan.get_plan_limit() as i64 {
+    if sub_info.calls > sub_info.plan.get_plan_limit() as i64 {
         Err(RpcAuthErrors::OutOfCredits)?
     }
 
-    match (sub_info.plan, sub_info.planexpiration) {
-        (Plan::Free, _) => {}
-        (_, Some(expiry)) => {
-            if expiry <= OffsetDateTime::now_utc() {
-                Err(RpcAuthErrors::PlanExpired)?
-            }
-        }
-        (_, None) => {
-            // this shouldn't happen
-        }
+    if matches!(sub_info.plan, Plan::Tier1 | Plan::Tier2 | Plan::Tier3)
+        && sub_info.expires > OffsetDateTime::now_utc()
+    {
+        Err(RpcAuthErrors::PlanExpired)?
     }
 
-    let inc = tokio::spawn(async move {
+    tokio::spawn(async move {
         sqlx::query!(
             // atomically decriment the credits field
-            "UPDATE Customers SET calls = calls + 1 WHERE email = $1",
+            "UPDATE RpcPlans SET calls = calls + 1 WHERE email = $1",
             sub_info.email,
         )
         .execute(db_connection)
         .await
     });
-    let ret = tokio::spawn(async { next.run(request).await });
 
-    let (res, inc) = join!(ret, inc);
-
-    inc.unwrap()?;
-
-    Ok(res.unwrap())
+    Ok(next.run(request).await)
 }
 
 #[derive(Debug, Error)]

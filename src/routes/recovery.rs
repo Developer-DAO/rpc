@@ -68,7 +68,7 @@ pub async fn recover_password_email(
             .to(user_email)
             .subject("D_D RPC Password Reset Code")
             .header(ContentType::TEXT_PLAIN)
-            .body(format!("Your reset code is: {}", verification_code))?;
+            .body(format!("Your reset code is: {verification_code}"))?;
 
         let mailer = SmtpTransport::starttls_relay("smtp.gmail.com")?
             .credentials(email_credentials)

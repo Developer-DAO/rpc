@@ -61,9 +61,10 @@ pub struct Api {
     pub apikey: String,
 }
 
-#[derive(Debug, Clone, sqlx::Type, Serialize, Deserialize)]
+#[derive(Debug, Clone, sqlx::Type, Serialize, Deserialize, Default, Copy)]
 #[sqlx(type_name = "PLAN", rename_all = "lowercase")]
 pub enum Plan {
+    #[default]
     Free,
     Tier1,
     Tier2,

@@ -1,5 +1,5 @@
 use super::types::{Email, RegisterUser, SERVER_EMAIL};
-use crate::database::types::{Plan, RELATIONAL_DATABASE, Role};
+use crate::database::types::{RELATIONAL_DATABASE, Role};
 use argon2::{
     Argon2, PasswordHasher,
     password_hash::{SaltString, rand_core::OsRng},
@@ -14,7 +14,8 @@ use lettre::{
 use rand::{Rng, rngs::ThreadRng};
 use thiserror::Error;
 // use time::OffsetDateTime;
-use tokio::{join, task::JoinError};
+use siwe::generate_nonce;
+use tokio::task::JoinError;
 
 pub struct Dedup {
     pub email: String,
@@ -61,47 +62,46 @@ pub async fn register_user(
         .to(user_email)
         .subject("D_D RPC Verification Code")
         .header(ContentType::TEXT_PLAIN)
-        .body(format!("Your verification code is: {}", verification_code))?;
+        .body(format!("Your verification code is: {verification_code}"))?;
 
     let mailer = smtp::SmtpTransport::starttls_relay("smtp.gmail.com")?
         .credentials(email_credentials)
         .build();
 
-    let send_mail: tokio::task::JoinHandle<Result<(), RegisterUserError>> =
-        tokio::spawn(async move {
-            let _: smtp::response::Response = mailer.send(&email)?;
-            Ok(())
-        });
-    let transaction = db_connection.begin().await?;
-    let db_write = tokio::spawn(async move {
+    tokio::spawn(async move {
+        let _: smtp::response::Response = mailer
+            .send(&email)
+            .expect("Failed to send verification email)");
+    });
+    tokio::spawn(async move {
+        let mut transaction = db_connection.begin().await?;
         sqlx::query!(
             r#"INSERT INTO Customers(
                 email, 
                 password, 
                 role,
-                plan,
                 verificationcode, 
-                calls, 
+                nonce,
                 balance,
                 activated
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"#,
+            VALUES ($1, $2, $3, $4, $5, $6, $7)"#,
             &payload.email,
             hashed_pass,
             Role::Normie as Role,
-            Plan::Free as Plan,
             verification_code.to_string(),
-            0,
+            generate_nonce(),
             0,
             false,
         )
-        .execute(db_connection)
-        .await
+        .execute(&mut *transaction)
+        .await?;
+        sqlx::query!("INSERT INTO RpcPlans(email) VALUES ($1)", &payload.email)
+            .execute(&mut *transaction)
+            .await?;
+        transaction.commit().await?;
+        Ok::<(), RegisterUserError>(())
     });
-    let (res_mail, res_db_write) = join!(send_mail, db_write);
-    res_mail??;
-    res_db_write??;
-    transaction.commit().await?;
     Ok((StatusCode::OK, "User was successfully registered").into_response())
 }
 
