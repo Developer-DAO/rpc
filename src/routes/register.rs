@@ -1,4 +1,4 @@
-use super::types::{Email, RegisterUser, SERVER_EMAIL};
+use super::types::{EmailLogin, RegisterUser, SERVER_EMAIL};
 use crate::database::types::{RELATIONAL_DATABASE, Role};
 use argon2::{
     Argon2, PasswordHasher,
@@ -47,7 +47,7 @@ pub async fn register_user(
 
     let verification_code: u32 = ThreadRng::default().gen_range(10000000..99999999);
 
-    let server_email_info: &'static Email = SERVER_EMAIL.get().unwrap();
+    let server_email_info: &'static EmailLogin = SERVER_EMAIL.get().unwrap();
     let email_credentials = Credentials::new(
         server_email_info.address.to_string(),
         server_email_info.password.to_string(),
@@ -68,15 +68,12 @@ pub async fn register_user(
         .credentials(email_credentials)
         .build();
 
-    tokio::spawn(async move {
-        let _: smtp::response::Response = mailer
-            .send(&email)
-            .expect("Failed to send verification email)");
-    });
-    tokio::spawn(async move {
-        let mut transaction = db_connection.begin().await?;
-        sqlx::query!(
-            r#"INSERT INTO Customers(
+    let _: smtp::response::Response = mailer
+        .send(&email)
+        .expect("Failed to send verification email)");
+    let mut transaction = db_connection.begin().await?;
+    sqlx::query!(
+        r#"INSERT INTO Customers(
                 email, 
                 password, 
                 role,
@@ -86,22 +83,20 @@ pub async fn register_user(
                 activated
             )
             VALUES ($1, $2, $3, $4, $5, $6, $7)"#,
-            &payload.email,
-            hashed_pass,
-            Role::Normie as Role,
-            verification_code.to_string(),
-            generate_nonce(),
-            0,
-            false,
-        )
+        &payload.email,
+        hashed_pass,
+        Role::Normie as Role,
+        verification_code.to_string(),
+        generate_nonce(),
+        0,
+        false,
+    )
+    .execute(&mut *transaction)
+    .await?;
+    sqlx::query!("INSERT INTO RpcPlans(email) VALUES ($1)", &payload.email)
         .execute(&mut *transaction)
         .await?;
-        sqlx::query!("INSERT INTO RpcPlans(email) VALUES ($1)", &payload.email)
-            .execute(&mut *transaction)
-            .await?;
-        transaction.commit().await?;
-        Ok::<(), RegisterUserError>(())
-    });
+    transaction.commit().await?;
     Ok((StatusCode::OK, "User was successfully registered").into_response())
 }
 
@@ -138,8 +133,8 @@ impl From<argon2::password_hash::Error> for RegisterUserError {
 #[cfg(test)]
 pub mod test {
     use crate::{
-        Database, Email, JWTKey, TcpListener, database::types::RELATIONAL_DATABASE, register_user,
-        routes::types::RegisterUser,
+        Database, EmailLogin, JWTKey, TcpListener, database::types::RELATIONAL_DATABASE,
+        register_user, routes::types::RegisterUser,
     };
     use argon2::{
         Argon2, PasswordHash, PasswordHasher, PasswordVerifier, password_hash::SaltString,
@@ -177,7 +172,7 @@ pub mod test {
         dotenv().unwrap();
         JWTKey::init().unwrap();
         Database::init().await.unwrap();
-        Email::init().unwrap();
+        EmailLogin::init().unwrap();
         let to = dotenvy::var("SMTP_USERNAME").unwrap();
 
         tokio::spawn(async move {
@@ -206,7 +201,15 @@ pub mod test {
             .execute(RELATIONAL_DATABASE.get().unwrap())
             .await
             .unwrap();
+
+        sqlx::query!("DELETE FROM RpcPlans WHERE email = $1", &to)
+            .execute(RELATIONAL_DATABASE.get().unwrap())
+            .await
+            .unwrap();
+
     }
+
+
 
     #[tokio::test]
     async fn mail() {

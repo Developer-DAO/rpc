@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use std::num::ParseIntError;
 use thiserror::Error;
 
-use super::types::{Email, SERVER_EMAIL};
+use super::types::{EmailLogin, SERVER_EMAIL};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ResetPasswordByEmail {
@@ -40,7 +40,7 @@ pub async fn recover_password_email(
         .await?
         .ok_or_else(|| RecoveryError::UserNotFound)?;
 
-    let server_email_info: &'static Email = SERVER_EMAIL.get().unwrap();
+    let server_email_info: &'static EmailLogin = SERVER_EMAIL.get().unwrap();
     let email_credentials = Credentials::new(
         server_email_info.address.to_string(),
         server_email_info.password.to_string(),

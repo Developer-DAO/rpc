@@ -2,7 +2,7 @@ use crate::middleware::{
     jwt_auth::verify_jwt, rpc_service::validate_subscription_and_update_user_calls,
 };
 // use crate::routes::relayer::types::PoktChains;
-use crate::routes::types::{Email, JWTKey};
+use crate::routes::types::{EmailLogin, JWTKey};
 use crate::routes::{
     activate::activate_account,
     api_keys::{delete_key, generate_api_keys, get_all_api_keys},
@@ -23,6 +23,8 @@ use axum::{
 };
 use database::types::Database;
 use dotenvy::dotenv;
+use middleware::rpc_service::{RpcAuthErrors, refill_calls_and_renew_plans};
+use mimalloc::MiMalloc;
 use routes::login::{refresh, user_login_siwe};
 use routes::payment::{
     apply_payment_to_plan, get_calls_and_balance, get_payments, process_ethereum_payment,
@@ -32,7 +34,6 @@ use tokio::net::TcpListener;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::info;
 use tracing_subscriber::fmt::format::FmtSpan;
-use mimalloc::MiMalloc;
 
 pub mod database;
 pub mod eth_rpc;
@@ -49,7 +50,7 @@ async fn main() {
     //    PoktChains::init_deployment_url();
     JWTKey::init().unwrap();
     Database::init().await.unwrap();
-    Email::init().unwrap();
+    EmailLogin::init().unwrap();
 
     tracing_subscriber::fmt()
         .with_span_events(FmtSpan::CLOSE)
@@ -105,6 +106,12 @@ async fn main() {
         .merge(payments)
         .layer(cors_api)
         .merge(relayer);
+
+    tokio::spawn(async move {
+        refill_calls_and_renew_plans().await?;
+        Ok::<(), RpcAuthErrors>(())
+    });
+
     info!("Initialized D_D RPC on 0.0.0.0:3000");
     let listener = TcpListener::bind("0.0.0.0:3000").await.unwrap();
     axum::serve(listener, app).await.unwrap();

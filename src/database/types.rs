@@ -5,6 +5,8 @@ use std::str::FromStr;
 use std::sync::OnceLock;
 use time::OffsetDateTime;
 
+use crate::routes::types::{EmailAddress, Password};
+
 use super::errors::{ChainidError, ParsingError};
 
 pub static RELATIONAL_DATABASE: OnceLock<Pool<Postgres>> = OnceLock::new();
@@ -26,11 +28,11 @@ impl Database {
 }
 
 #[derive(FromRow, Debug)]
-pub struct Customers {
-    pub email: String,
+pub struct Customers<'a> {
+    pub email: EmailAddress<'a>,
     pub wallet: Option<String>,
     pub role: Role,
-    pub password: String,
+    pub password: Password<'a>,
     pub verificationcode: String,
     pub activated: bool,
 }
@@ -44,8 +46,8 @@ pub struct PaymentInfo {
 }
 
 #[derive(FromRow, Debug, Serialize, Deserialize)]
-pub struct Payments {
-    pub customeremail: String,
+pub struct Payments<'a> {
+    pub customeremail: EmailAddress<'a>,
     pub transactionhash: String,
     pub asset: Asset,
     pub amount: String,
@@ -56,8 +58,8 @@ pub struct Payments {
 }
 
 #[derive(FromRow, Debug, Serialize, Deserialize)]
-pub struct Api {
-    pub customeremail: String,
+pub struct Api<'a> {
+    pub customeremail: EmailAddress<'a>,
     pub apikey: String,
 }
 

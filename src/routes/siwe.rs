@@ -12,7 +12,7 @@ use sqlx::prelude::FromRow;
 use thiserror::Error;
 use time::OffsetDateTime;
 
-use super::types::Claims;
+use super::types::{Claims, SiweNonce};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Siwe {
@@ -20,13 +20,12 @@ pub struct Siwe {
     pub signature: Vec<u8>,
 }
 
-#[derive(FromRow)]
-pub struct Nonce {
-    nonce: Option<String>,
+pub struct Nonce<'a> {
+    nonce: SiweNonce<'a>,
 }
 
 pub async fn siwe_add_wallet(
-    Extension(jwt): Extension<JWTClaims<Claims>>,
+    Extension(jwt): Extension<JWTClaims<Claims<'_>>>,
     Json(payload): Json<Siwe>,
 ) -> Result<impl IntoResponse, SiweError> {
     let msg: Message = payload.message.parse()?;
@@ -34,12 +33,11 @@ pub async fn siwe_add_wallet(
     let nonce = sqlx::query_as!(
         Nonce,
         "SELECT nonce FROM Customers where email = $1",
-        jwt.custom.email,
+        jwt.custom.email.as_str(),
     )
     .fetch_one(RELATIONAL_DATABASE.get().unwrap())
     .await?
-    .nonce
-    .ok_or_else(|| SiweError::IncorrectNonce)?;
+    .nonce;
 
     let rpc = ProviderBuilder::new().on_http(ETHEREUM_ENDPOINT[0].as_str().parse().unwrap());
 
@@ -51,7 +49,7 @@ pub async fn siwe_add_wallet(
 
     let verification_opts = VerificationOpts {
         domain: Some(domain.parse().unwrap()),
-        nonce: Some(nonce),
+        nonce: Some(nonce.to_string()),
         timestamp: Some(OffsetDateTime::now_utc()),
         rpc_provider: Some(rpc),
     };
@@ -63,7 +61,7 @@ pub async fn siwe_add_wallet(
     sqlx::query!(
         "UPDATE Customers SET wallet = $1 where email = $2",
         address,
-        jwt.custom.email
+        jwt.custom.email.as_str()
     )
     .execute(RELATIONAL_DATABASE.get().unwrap())
     .await?;
@@ -72,13 +70,13 @@ pub async fn siwe_add_wallet(
 }
 
 pub async fn get_siwe_nonce(
-    Extension(jwt): Extension<JWTClaims<Claims>>,
+    Extension(jwt): Extension<JWTClaims<Claims<'_>>>,
 ) -> Result<impl IntoResponse, SiweError> {
     let nonce = generate_nonce();
     sqlx::query!(
         "UPDATE Customers SET nonce = $1 where email = $2",
         nonce,
-        jwt.custom.email
+        jwt.custom.email.as_str()
     )
     .execute(RELATIONAL_DATABASE.get().unwrap())
     .await?;
