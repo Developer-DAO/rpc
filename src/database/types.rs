@@ -136,11 +136,8 @@ impl Plan {
     pub fn get_cost(&self) -> f64 {
         match self {
             Plan::Free => 0.0,
-            // $50
             Plan::Tier1 => Self::TIER_ONE_COST,
-            // $200
             Plan::Tier2 => Self::TIER_TWO_COST,
-            // $875
             Plan::Tier3 => Self::TIER_THREE_COST,
         }
     }

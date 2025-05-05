@@ -86,7 +86,7 @@ async fn main() {
         .route_layer(from_fn(verify_jwt));
     let siwe = Router::new()
         .route("/api/refresh", post(refresh))
-        .route("/api/siwe/nonce", get(get_siwe_nonce))
+        .route("/api/siwe/nonce/{email}", get(get_siwe_nonce))
         .route("/api/siwe/add_wallet", post(siwe_add_wallet))
         .route_layer(from_fn(verify_jwt));
 
