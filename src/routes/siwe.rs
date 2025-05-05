@@ -72,7 +72,7 @@ pub async fn get_siwe_nonce(Path(addr): Path<[String; 1]>) -> Result<impl IntoRe
     let nonce = generate_nonce();
     let addr = addr.first().ok_or_else(|| SiweError::SiweEmailError)?;
     sqlx::query!(
-        "UPDATE Customers SET nonce = $1 where email = $2",
+        "UPDATE Customers SET nonce = $1 where wallet = $2",
         nonce,
         &addr
     )
