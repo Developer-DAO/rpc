@@ -1,14 +1,13 @@
 use crate::{database::types::RELATIONAL_DATABASE, eth_rpc::types::ETHEREUM_ENDPOINT};
 use alloy::{primitives::Address, providers::ProviderBuilder};
 use axum::{
-    extract::{Extension, Json},
+    extract::{Extension, Json, Path},
     http::StatusCode,
     response::IntoResponse,
 };
 use jwt_simple::claims::JWTClaims;
 use serde::{Deserialize, Serialize};
 use siwe::{Message, VerificationError, VerificationOpts, generate_nonce};
-use sqlx::prelude::FromRow;
 use thiserror::Error;
 use time::OffsetDateTime;
 
@@ -69,14 +68,13 @@ pub async fn siwe_add_wallet(
     Ok((StatusCode::OK, address).into_response())
 }
 
-pub async fn get_siwe_nonce(
-    Extension(jwt): Extension<JWTClaims<Claims<'_>>>,
-) -> Result<impl IntoResponse, SiweError> {
+pub async fn get_siwe_nonce(Path(addr): Path<[String; 1]>) -> Result<impl IntoResponse, SiweError> {
     let nonce = generate_nonce();
+    let addr = addr.first().ok_or_else(|| SiweError::SiweEmailError)?;
     sqlx::query!(
         "UPDATE Customers SET nonce = $1 where email = $2",
         nonce,
-        jwt.custom.email.as_str()
+        &addr
     )
     .execute(RELATIONAL_DATABASE.get().unwrap())
     .await?;
@@ -85,6 +83,8 @@ pub async fn get_siwe_nonce(
 
 #[derive(Debug, Error)]
 pub enum SiweError {
+    #[error("Missing email for siwe nonce")]
+    SiweEmailError,
     #[error(transparent)]
     VerificationFailed(#[from] VerificationError),
     #[error("Incorrect siwe nonce for user")]

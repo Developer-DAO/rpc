@@ -23,7 +23,7 @@ use axum::{
 };
 use database::types::Database;
 use dotenvy::dotenv;
-use middleware::rpc_service::{RpcAuthErrors, refill_calls_and_renew_plans};
+// use middleware::rpc_service::{RpcAuthErrors, refill_calls_and_renew_plans};
 use mimalloc::MiMalloc;
 use routes::login::{refresh, user_login_siwe};
 use routes::payment::{
@@ -107,10 +107,10 @@ async fn main() {
         .layer(cors_api)
         .merge(relayer);
 
-    tokio::spawn(async move {
-        refill_calls_and_renew_plans().await?;
-        Ok::<(), RpcAuthErrors>(())
-    });
+    // tokio::spawn(async move {
+    //     refill_calls_and_renew_plans().await?;
+    //     Ok::<(), RpcAuthErrors>(())
+    // });
 
     info!("Initialized D_D RPC on 0.0.0.0:3000");
     let listener = TcpListener::bind("0.0.0.0:3000").await.unwrap();

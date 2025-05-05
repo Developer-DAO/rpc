@@ -47,15 +47,20 @@ pub async fn validate_subscription_and_update_user_calls(
     .await?
     .ok_or_else(|| RpcAuthErrors::InvalidApiKey)?;
 
-    // check callcount
-    if sub_info.calls > sub_info.plan.get_plan_limit() as i64 {
-        Err(RpcAuthErrors::OutOfCredits)?
-    }
-
     if matches!(sub_info.plan, Plan::Tier1 | Plan::Tier2 | Plan::Tier3)
         && sub_info.expires > OffsetDateTime::now_utc()
     {
+        // tokio::spawn(async move {
+        //     if let Err(e) = refill_calls_and_renew_plans().await {
+        //         info!("Failed to refill calls or reset plan for users:\n {}", e);
+        //     }
+        // });
         Err(RpcAuthErrors::PlanExpired)?
+    }
+
+    // check callcount
+    if sub_info.calls > sub_info.plan.get_plan_limit() as i64 {
+        Err(RpcAuthErrors::OutOfCredits)?
     }
 
     tokio::spawn(async move {
@@ -113,7 +118,7 @@ pub async fn refill_calls_and_renew_plans() -> Result<(), RpcAuthErrors> {
             if matches!(user_info.plan, Plan::Tier1 | Plan::Tier2 | Plan::Tier3)
                 && user_info.expires > OffsetDateTime::now_utc()
             {
-                let cost = user_info.plan.get_cost() as i64;
+                let cost = (user_info.plan.get_cost() * 100.0) as i64;
 
                 if user_info.balance >= cost {
                     sqlx::query!(

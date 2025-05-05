@@ -118,20 +118,20 @@ impl FromStr for Plan {
 }
 
 impl Plan {
-    pub const FREE_TIER_LIMIT: u32 = 3_100_000;
-    // Free Tier: 3.1M requests per month
-    pub const TIER_ONE: u32 = 30_000_000;
-    pub const TIER_ONE_COST: f64 = 50.0;
-    // Tier 1: 30M requests per month
-    // price: $50/mo
-    pub const TIER_TWO: u32 = 125_000_000;
-    pub const TIER_TWO_COST: f64 = 20.0;
-    // Tier 2: 125M requests per month
+    pub const FREE_TIER_LIMIT: u32 = 1_000_000;
+    // Free Tier: 1M requests per month
+    pub const TIER_ONE: u32 = 10_000_000;
+    pub const TIER_ONE_COST: f64 = 40.0;
+    // Tier 1: 15M requests per month
+    // price: $40/mo
+    pub const TIER_TWO: u32 = 50_000_000;
+    pub const TIER_TWO_COST: f64 = 200.0;
+    // Tier 2: 50M requests per month
     // price: $200/mo
-    pub const TIER_THREE: u32 = 500_000_000;
-    pub const TIER_THREE_COST: f64 = 875.0;
-    // Tier 3: 500M requests per month
-    // price: $875/mo
+    pub const TIER_THREE: u32 = 250_000_000;
+    pub const TIER_THREE_COST: f64 = 900.0;
+    // Tier 3: 250M requests per month
+    // price: $900/mo
 
     pub fn get_cost(&self) -> f64 {
         match self {
