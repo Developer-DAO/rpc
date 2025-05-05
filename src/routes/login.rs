@@ -91,7 +91,7 @@ pub async fn user_login_siwe(Json(payload): Json<Siwe>) -> Result<impl IntoRespo
     let rpc = ProviderBuilder::new().on_http(ETHEREUM_ENDPOINT[0].as_str().parse().unwrap());
 
     let domain = if cfg!(feature = "dev") {
-        "localhost"
+        "localhost:5173"
     } else {
         "Developer DAO Cloud"
     };
