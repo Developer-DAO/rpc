@@ -159,7 +159,7 @@ pub async fn get_calls_and_balance<'a>(
     .fetch_one(RELATIONAL_DATABASE.get().unwrap())
     .await?;
 
-    Ok((StatusCode::OK, sonic_rs::to_string(&res)?).into_response())
+    Ok((StatusCode::OK, serde_json::to_string(&res)?).into_response())
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -207,7 +207,7 @@ pub async fn get_payments<'a>(
         })
         .collect();
 
-    Ok((StatusCode::OK, sonic_rs::to_string(&res)?).into_response())
+    Ok((StatusCode::OK, serde_json::to_string(&res)?).into_response())
 }
 
 pub async fn apply_payment_to_plan(
@@ -560,7 +560,7 @@ pub enum PaymentError {
     #[error("No destination for tx")]
     NoDestination,
     #[error(transparent)]
-    SonicError(#[from] sonic_rs::Error),
+    JsonError(#[from] serde_json::Error),
     #[error("Transaction failed")]
     TxFailed,
     #[error(transparent)]

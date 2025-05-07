@@ -1,5 +1,5 @@
-use crate::json_rpc::types::JsonRpcRequest;
 use reqwest::Client;
+use serde::Serialize;
 use std::{
     fmt::{self, Display, Formatter},
     future::Future,
@@ -7,14 +7,11 @@ use std::{
     sync::LazyLock,
 };
 
-pub static GATEWAY_ENDPOINT: LazyLock<&'static str> =
-    LazyLock::new(|| format!("{}/v1", dotenvy::var("GATEWAY_URL").unwrap()).leak());
+// pub static GATEWAY_ENDPOINT: LazyLock<&'static str> =
+//     LazyLock::new(|| format!("{}/v1", dotenvy::var("GATEWAY_URL").unwrap()).leak());
 
-pub trait Relayer {
-    fn relay_transaction(
-        &self,
-        body: &JsonRpcRequest,
-    ) -> impl Future<Output = Result<String, RelayErrors>>;
+pub trait Relayer<T> {
+    fn relay_transaction(&self, body: &T) -> impl Future<Output = Result<String, RelayErrors>>;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -179,11 +176,14 @@ impl PoktChains {
     }
 }
 
-impl Relayer for PoktChains {
-    async fn relay_transaction(&self, body: &JsonRpcRequest) -> Result<String, RelayErrors> {
+impl<T> Relayer<T> for PoktChains 
+where 
+    T: Serialize
+{
+    async fn relay_transaction(&self, body: &T) -> Result<String, RelayErrors> {
         Ok(Client::new()
-            .post(*GATEWAY_ENDPOINT)
-            .header("target-service-id", self.id())
+            .post(dotenvy::var("SEPOLIA_PROVIDER").unwrap())
+//            .header("target-service-id", self.id())
             .json(body)
             .send()
             .await?

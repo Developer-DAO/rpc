@@ -26,7 +26,7 @@ pub struct SubscriptionInfo<'a> {
     balance: i64,
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(request))]
 pub async fn validate_subscription_and_update_user_calls(
     Path(key): Path<[String; 2]>,
     request: Request,

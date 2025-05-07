@@ -107,7 +107,7 @@ pub async fn user_login_siwe(Json(payload): Json<Siwe>) -> Result<impl IntoRespo
 
     let user_info = Claims {
         role: customer.role,
-        email: customer.email,
+        email: customer.email.to_owned(),
         wallet: Some(address),
     };
     let claims = jwt_simple::claims::Claims::with_custom_claims(user_info, Duration::from_hours(2));
@@ -126,7 +126,7 @@ pub async fn user_login_siwe(Json(payload): Json<Siwe>) -> Result<impl IntoRespo
         HeaderValue::from_str("SameSite=Strict").unwrap(),
     );
 
-    Ok((StatusCode::OK, headers))
+    Ok((StatusCode::OK, headers, customer.email.to_string()))
 }
 
 #[tracing::instrument(skip(payload), fields(email = %payload.email))]

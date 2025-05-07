@@ -1,16 +1,13 @@
-use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
-
+use axum::{body::Bytes, extract::Path, http::StatusCode, response::IntoResponse, Json};
+use serde_json::Value;
 use super::types::RelayErrors;
-use crate::{
-    json_rpc::types::JsonRpcRequest,
-    routes::relayer::types::{PoktChains, Relayer},
-};
+use crate::routes::relayer::types::{PoktChains, Relayer};
 
 use thiserror::Error;
 
 pub async fn route_call(
     Path(route_info): Path<[String; 2]>,
-    Json(body): Json<JsonRpcRequest>,
+    Json(body): Json<Value>,
 ) -> Result<impl IntoResponse, RouterErrors> {
     let raw_destination = route_info
         .first()
