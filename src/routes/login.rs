@@ -88,7 +88,7 @@ pub async fn user_login_siwe(Json(payload): Json<Siwe>) -> Result<impl IntoRespo
     .await?
     .ok_or_else(|| LoginError::InvalidAddress)?;
 
-    let rpc = ProviderBuilder::new().on_http(ETHEREUM_ENDPOINT[0].as_str().parse().unwrap());
+    let rpc = ProviderBuilder::new().connect_http(ETHEREUM_ENDPOINT[0].as_str().parse().unwrap());
 
     let domain = if cfg!(feature = "dev") {
         "localhost:5173"
@@ -145,7 +145,7 @@ pub async fn user_login(
 
     let plaintext_password = payload.password.as_bytes();
     let hashed_password =
-        PasswordHash::new(&user.password.as_str()).map_err(|_| LoginError::HashingError)?;
+        PasswordHash::new(user.password.as_str()).map_err(|_| LoginError::HashingError)?;
     Argon2::default()
         .verify_password(plaintext_password, &hashed_password)
         .map_err(|_| LoginError::InvalidEmailOrPassword)?;

@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, Pool, Postgres, migrate, postgres::PgPoolOptions};
-use std::fmt::Display;
 use std::str::FromStr;
 use std::sync::OnceLock;
+use std::{fmt::Display, time::Duration};
 use time::OffsetDateTime;
 
 use crate::routes::types::{EmailAddress, Password};
@@ -16,6 +16,7 @@ pub struct Database;
 impl Database {
     pub async fn init() -> Result<(), Box<dyn std::error::Error>> {
         let pool = PgPoolOptions::new()
+            .after_release(|_, _| Box::pin(async move { Ok(false) }))
             .connect(&dotenvy::var("DATABASE_URL").unwrap())
             .await
             .unwrap();

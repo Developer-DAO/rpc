@@ -5,10 +5,11 @@ use crate::database::types::{Asset, Chain, Payments, Plan, RELATIONAL_DATABASE};
 use crate::eth_rpc::types::ETHEREUM_ENDPOINT;
 #[cfg(test)]
 use crate::eth_rpc::types::TESTING_ENDPOINT;
+use alloy::consensus::Transaction;
 use alloy::eips::BlockId;
 use alloy::primitives::ruint::ParseError;
 use alloy::primitives::utils::{UnitsError, parse_units};
-use alloy::rpc::types::{BlockTransactionsKind, Transaction, TransactionReceipt};
+use alloy::rpc::types::TransactionReceipt;
 use alloy::transports::{RpcError, TransportErrorKind};
 use alloy::{
     network::ReceiptResponse,
@@ -299,39 +300,38 @@ pub async fn process_ethereum_payment(
     let mut fixed = [0u8; 32];
     fixed.copy_from_slice(&hash);
 
-    let res: tokio::task::JoinHandle<Result<Transaction, PaymentError>> = {
-        tokio::spawn(async move {
-            let eth = reqwest::Url::parse(_endpoint).unwrap();
-            let provider = ProviderBuilder::new().on_http(eth);
-            provider
+    let eth = reqwest::Url::parse(_endpoint).unwrap();
+    let provider = ProviderBuilder::new().connect_http(eth);
+
+    let p1 = provider.clone();
+    let res = tokio::spawn(async move {
+            p1 
                 .get_transaction_by_hash(FixedBytes::from(&fixed))
                 .await?
                 .ok_or_else(|| PaymentError::TxNotFound)
-        })
-    };
+        });
+    
 
+
+    let p2 = provider.clone();
     let receipt: tokio::task::JoinHandle<Result<TransactionReceipt, PaymentError>> = {
         tokio::spawn(async move {
-            let eth = reqwest::Url::parse(_endpoint).unwrap();
-            let provider = ProviderBuilder::new().on_http(eth);
-            provider
+            p2
                 .get_transaction_receipt(FixedBytes::from(&fixed))
                 .await?
                 .ok_or_else(|| PaymentError::TxNotFound)
         })
     };
 
+    let p3 = provider.clone();
     let last_safe_block: tokio::task::JoinHandle<Result<u64, PaymentError>> = {
         tokio::spawn(async move {
-            let eth = reqwest::Url::parse(_endpoint).unwrap();
-            let provider = ProviderBuilder::new().on_http(eth);
-            provider
-                .get_block(BlockId::safe(), BlockTransactionsKind::Full)
+            Ok(p3
+                .get_block(BlockId::safe())
                 .await?
                 .ok_or_else(|| PaymentError::TxNotFinalized)?
                 .header
-                .number
-                .ok_or_else(|| PaymentError::TxNotFinalized)
+                .number)
         })
     };
 
@@ -351,13 +351,13 @@ pub async fn process_ethereum_payment(
         Err(PaymentError::TxNotFinalized)?
     }
 
-    let res: &Transaction = &res??;
+    let res = &res??;
 
-    if jwt.custom.wallet.is_none_or(|e| res.from != e) {
+    if jwt.custom.wallet.is_none_or(|e| res.inner.signer() != e) {
         Err(PaymentError::SenderWalletMismatch)?
     }
 
-    let payment: Payments = match res.input == Bytes::new() {
+    let payment: Payments = match res.inner.input() == &Bytes::new() {
         // ether
         true => {
             Err(PaymentError::UnsupportedToken)?
@@ -385,16 +385,16 @@ pub async fn process_ethereum_payment(
         }
         // token handling
         false => {
-            let decoded = if let Ok(d) = ERC20::transferCall::abi_decode(&res.input, true) {
+            let decoded = if let Ok(d) = ERC20::transferCall::abi_decode(res.input()) {
                 Transfer::Transfer(d)
-            } else if let Ok(tf) = ERC20::transferFromCall::abi_decode(&res.input, true) {
+            } else if let Ok(tf) = ERC20::transferFromCall::abi_decode(res.input()) {
                 Transfer::TransferFrom(tf)
             } else {
                 Err(PaymentError::AbiDecodingError)?
             };
 
             #[cfg(not(feature = "dev"))]
-            let _token_address = res.to.ok_or_else(|| PaymentError::UnsupportedToken)?;
+            let _token_address = res.inner.to().ok_or_else(|| PaymentError::UnsupportedToken)?;
 
             let (amount, to) = match decoded {
                 Transfer::Transfer(tx) => (tx.amount, tx.to),
@@ -632,9 +632,8 @@ mod tests {
         let rpc_url = anvil.endpoint().parse().unwrap();
         TESTING_ENDPOINT.get_or_init(|| anvil.endpoint().leak());
         let provider = ProviderBuilder::new()
-            .with_recommended_fillers()
             .wallet(wallet)
-            .on_http(rpc_url);
+            .connect_http(rpc_url);
 
         // let eth_tx = provider
         //     .transaction_request()
