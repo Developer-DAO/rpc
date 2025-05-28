@@ -293,38 +293,3 @@ impl std::error::Error for RelayErrors {
         }
     }
 }
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum PoktTestnetChains {
-    Holesky,
-    PocketTestnet,
-}
-
-impl fmt::Display for PoktTestnetChains {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            PoktTestnetChains::Holesky => write!(f, "0081"),
-            PoktTestnetChains::PocketTestnet => write!(f, "0002"),
-        }
-    }
-}
-
-impl PoktTestnetChains {
-    pub fn id(&self) -> &'static str {
-        match self {
-            PoktTestnetChains::Holesky => "0081",
-            PoktTestnetChains::PocketTestnet => "0002",
-        }
-    }
-}
-
-impl FromStr for PoktTestnetChains {
-    type Err = RelayErrors;
-    fn from_str(value: &str) -> Result<Self, Self::Err> {
-        match value.to_lowercase().as_ref() {
-            "holesky" => Ok(PoktTestnetChains::Holesky),
-            "pockettestnet" => Ok(PoktTestnetChains::PocketTestnet),
-            _ => Err(RelayErrors::PoktChainIdParsingError),
-        }
-    }
-}

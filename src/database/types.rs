@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, Pool, Postgres, migrate, postgres::PgPoolOptions};
 use std::str::FromStr;
 use std::sync::OnceLock;
-use std::{fmt::Display, time::Duration};
+use std::fmt::Display;
 use time::OffsetDateTime;
 
 use crate::routes::types::{EmailAddress, Password};

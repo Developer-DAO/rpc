@@ -29,7 +29,7 @@ use routes::login::{refresh, user_login_siwe};
 use routes::payment::{
     apply_payment_to_plan, get_calls_and_balance, get_payments, process_ethereum_payment,
 };
-use routes::siwe::{get_siwe_nonce, siwe_add_wallet};
+use routes::siwe::{get_siwe_nonce, jwt_get_siwe_nonce, siwe_add_wallet};
 use tokio::net::TcpListener;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::info;
@@ -87,6 +87,7 @@ async fn main() {
     let siwe = Router::new()
         .route("/api/refresh", post(refresh))
         .route("/api/siwe/add_wallet", post(siwe_add_wallet))
+        .route("/api/siwe/nonce/jwt", get(jwt_get_siwe_nonce))
         .route_layer(from_fn(verify_jwt))
         .route("/api/siwe/nonce/{wallet}", get(get_siwe_nonce));
 

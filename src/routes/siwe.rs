@@ -23,6 +23,7 @@ pub struct Nonce<'a> {
     nonce: SiweNonce<'a>,
 }
 
+#[tracing::instrument]
 pub async fn siwe_add_wallet(
     Extension(jwt): Extension<JWTClaims<Claims<'_>>>,
     Json(payload): Json<Siwe>,
@@ -68,18 +69,39 @@ pub async fn siwe_add_wallet(
     Ok((StatusCode::OK, address).into_response())
 }
 
-pub async fn get_siwe_nonce(Path(addr): Path<[String; 1]>) -> Result<impl IntoResponse, SiweError> {
+#[tracing::instrument]
+pub async fn get_siwe_nonce(Path(addr): Path<[Address; 1]>) -> Result<impl IntoResponse, SiweError> {
     let nonce = generate_nonce();
     let addr = addr.first().ok_or_else(|| SiweError::SiweEmailError)?;
+    let mut tx = RELATIONAL_DATABASE.get().unwrap().begin().await?;
     sqlx::query!(
         "UPDATE Customers SET nonce = $1 where wallet = $2",
         nonce,
-        &addr
+        addr.to_string()
     )
-    .execute(RELATIONAL_DATABASE.get().unwrap())
+    .execute(&mut *tx)
     .await?;
+    tx.commit().await?;
     Ok((StatusCode::OK, nonce).into_response())
 }
+
+#[tracing::instrument]
+pub async fn jwt_get_siwe_nonce(
+    Extension(jwt): Extension<JWTClaims<Claims<'_>>>,
+) ->Result<impl IntoResponse, SiweError> {
+    let nonce = generate_nonce();
+    let mut tx = RELATIONAL_DATABASE.get().unwrap().begin().await?;
+    sqlx::query!(
+        "UPDATE Customers SET nonce = $1 where email = $2",
+        nonce,
+        jwt.custom.email.as_str(),
+    )
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok((StatusCode::OK, nonce).into_response())
+}
+
 
 #[derive(Debug, Error)]
 pub enum SiweError {

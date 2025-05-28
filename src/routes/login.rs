@@ -37,7 +37,6 @@ pub struct SiweLogin<'a> {
     pub nonce: SiweNonce<'a>,
 }
 
-#[tracing::instrument]
 pub async fn refresh(
     Extension(jwt): Extension<JWTClaims<Claims<'_>>>,
 ) -> Result<impl IntoResponse, LoginError> {
