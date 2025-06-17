@@ -37,7 +37,6 @@ use tracing_subscriber::fmt::format::FmtSpan;
 
 pub mod database;
 pub mod eth_rpc;
-pub mod json_rpc;
 pub mod middleware;
 pub mod routes;
 
