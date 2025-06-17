@@ -1,9 +1,11 @@
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, Pool, Postgres, migrate, postgres::PgPoolOptions};
-use std::fmt::Display;
 use std::str::FromStr;
 use std::sync::OnceLock;
+use std::fmt::Display;
 use time::OffsetDateTime;
+
+use crate::routes::types::{EmailAddress, Password};
 
 use super::errors::{ChainidError, ParsingError};
 
@@ -14,7 +16,6 @@ pub struct Database;
 impl Database {
     pub async fn init() -> Result<(), Box<dyn std::error::Error>> {
         let pool = PgPoolOptions::new()
-            // todo: fix this for prod
             .after_release(|_, _| Box::pin(async move { Ok(false) }))
             .connect(&dotenvy::var("DATABASE_URL").unwrap())
             .await
@@ -26,11 +27,11 @@ impl Database {
 }
 
 #[derive(FromRow, Debug)]
-pub struct Customers {
-    pub email: String,
+pub struct Customers<'a> {
+    pub email: EmailAddress<'a>,
     pub wallet: Option<String>,
     pub role: Role,
-    pub password: String,
+    pub password: Password<'a>,
     pub verificationcode: String,
     pub activated: bool,
 }
@@ -44,8 +45,8 @@ pub struct PaymentInfo {
 }
 
 #[derive(FromRow, Debug, Serialize, Deserialize)]
-pub struct Payments {
-    pub customeremail: String,
+pub struct Payments<'a> {
+    pub customeremail: EmailAddress<'a>,
     pub transactionhash: String,
     pub asset: Asset,
     pub amount: String,
@@ -56,14 +57,15 @@ pub struct Payments {
 }
 
 #[derive(FromRow, Debug, Serialize, Deserialize)]
-pub struct Api {
-    pub customeremail: String,
+pub struct Api<'a> {
+    pub customeremail: EmailAddress<'a>,
     pub apikey: String,
 }
 
-#[derive(Debug, Clone, sqlx::Type, Serialize, Deserialize)]
+#[derive(Debug, Clone, sqlx::Type, Serialize, Deserialize, Default, Copy)]
 #[sqlx(type_name = "PLAN", rename_all = "lowercase")]
 pub enum Plan {
+    #[default]
     Free,
     Tier1,
     Tier2,
@@ -115,29 +117,26 @@ impl FromStr for Plan {
 }
 
 impl Plan {
-    pub const FREE_TIER_LIMIT: u32 = 3_100_000;
-    // Free Tier: 3.1M requests per month
-    pub const TIER_ONE: u32 = 30_000_000;
-    pub const TIER_ONE_COST: f64 = 50.0;
-    // Tier 1: 30M requests per month
-    // price: $50/mo
-    pub const TIER_TWO: u32 = 125_000_000;
-    pub const TIER_TWO_COST: f64 = 20.0;
-    // Tier 2: 125M requests per month
+    pub const FREE_TIER_LIMIT: u32 = 1_000_000;
+    // Free Tier: 1M requests per month
+    pub const TIER_ONE: u32 = 10_000_000;
+    pub const TIER_ONE_COST: f64 = 40.0;
+    // Tier 1: 10M requests per month
+    // price: $40/mo
+    pub const TIER_TWO: u32 = 50_000_000;
+    pub const TIER_TWO_COST: f64 = 200.0;
+    // Tier 2: 50M requests per month
     // price: $200/mo
-    pub const TIER_THREE: u32 = 500_000_000;
-    pub const TIER_THREE_COST: f64 = 875.0;
-    // Tier 3: 500M requests per month
-    // price: $875/mo
+    pub const TIER_THREE: u32 = 250_000_000;
+    pub const TIER_THREE_COST: f64 = 900.0;
+    // Tier 3: 250M requests per month
+    // price: $900/mo
 
     pub fn get_cost(&self) -> f64 {
         match self {
             Plan::Free => 0.0,
-            // $50
             Plan::Tier1 => Self::TIER_ONE_COST,
-            // $200
             Plan::Tier2 => Self::TIER_TWO_COST,
-            // $875
             Plan::Tier3 => Self::TIER_THREE_COST,
         }
     }

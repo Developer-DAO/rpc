@@ -1,12 +1,12 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT planexpiration, calls, email, plan as \"plan!: Plan\"\n        FROM Customers\n        WHERE Customers.email = (SELECT customerEmail FROM Api WHERE apiKey = $1)",
+  "query": "\n        SELECT email, calls, plan as \"plan!: Plan\", expires\n        FROM RpcPlans\n        WHERE \n        email = (SELECT customerEmail FROM Api WHERE apiKey = $1) \n        ",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "planexpiration",
-        "type_info": "Timestamptz"
+        "name": "email",
+        "type_info": "Varchar"
       },
       {
         "ordinal": 1,
@@ -15,11 +15,6 @@
       },
       {
         "ordinal": 2,
-        "name": "email",
-        "type_info": "Varchar"
-      },
-      {
-        "ordinal": 3,
         "name": "plan!: Plan",
         "type_info": {
           "Custom": {
@@ -34,6 +29,11 @@
             }
           }
         }
+      },
+      {
+        "ordinal": 3,
+        "name": "expires",
+        "type_info": "Timestamptz"
       }
     ],
     "parameters": {
@@ -42,11 +42,11 @@
       ]
     },
     "nullable": [
-      true,
+      false,
       false,
       false,
       false
     ]
   },
-  "hash": "e8d93509c60dbc45585fc3dae3501bf811fbc020438ea01d1efafdc15ec52a51"
+  "hash": "ad236e6958d9b1b2c38977266814a35f24a23851d9c5fa9fa8acc45465076ee1"
 }

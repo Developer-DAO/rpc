@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT calls, balance \n        FROM Customers \n        where email = $1",
+  "query": "SELECT calls, balance \n        FROM Customers, RpcPlans \n        where Customers.email = $1 \n        AND \n        RpcPlans.email = $1",
   "describe": {
     "columns": [
       {
@@ -24,5 +24,5 @@
       false
     ]
   },
-  "hash": "73a8ade3294141e5a4b8d1fd39c4d94391ca809060b08d914c485fd596ce58f1"
+  "hash": "7b7b778aab701f19ca7f0e8b60efd6e5e102eed0581d05a440aebedbc6082b0a"
 }

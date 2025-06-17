@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE Customers SET balance = balance - $1 WHERE Customers.email = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6e5a6c688ecf5e76444ec7b88500083fca7c5a55998381bb2595dccfa3661268"
+}

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO RpcPlans(email) VALUES ($1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "261d9aeb8aa6c7a716b8859e80fb276852f935c48333e4cf5f5dba0afccde179"
+}

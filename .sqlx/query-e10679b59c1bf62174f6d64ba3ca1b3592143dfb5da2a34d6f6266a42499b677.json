@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE RpcPlans SET calls = calls + 1 WHERE email = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e10679b59c1bf62174f6d64ba3ca1b3592143dfb5da2a34d6f6266a42499b677"
+}

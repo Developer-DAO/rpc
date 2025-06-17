@@ -1,4 +1,3 @@
 /target
 .env
 ~/.config/nvim-data/undodir/
-.sqlx

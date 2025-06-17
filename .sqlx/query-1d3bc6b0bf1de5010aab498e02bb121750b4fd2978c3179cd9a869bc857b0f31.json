@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO Customers(\n                email, \n                password, \n                role,\n                verificationcode, \n                nonce,\n                balance,\n                activated\n            )\n            VALUES ($1, $2, $3, $4, $5, $6, $7)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Varchar",
+        {
+          "Custom": {
+            "name": "role",
+            "kind": {
+              "Enum": [
+                "normie",
+                "admin"
+              ]
+            }
+          }
+        },
+        "Varchar",
+        "Text",
+        "Int8",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1d3bc6b0bf1de5010aab498e02bb121750b4fd2978c3179cd9a869bc857b0f31"
+}

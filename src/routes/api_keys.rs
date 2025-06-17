@@ -17,12 +17,12 @@ pub struct KeygenLimit {
 
 #[tracing::instrument]
 pub async fn generate_api_keys(
-    Extension(jwt): Extension<JWTClaims<Claims>>,
+    Extension(jwt): Extension<JWTClaims<Claims<'_>>>,
 ) -> Result<impl IntoResponse, ApiKeyError> {
     let keys = sqlx::query_as!(
         KeygenLimit,
         "SELECT COUNT(*) FROM Api where customerEmail = $1",
-        jwt.custom.email
+        jwt.custom.email.as_str()
     )
     .fetch_one(RELATIONAL_DATABASE.get().unwrap())
     .await?
@@ -37,7 +37,7 @@ pub async fn generate_api_keys(
     let key_string = hex::encode(secret_key.secret_bytes());
     sqlx::query!(
         "INSERT INTO Api (customerEmail, apiKey) VALUES ($1, $2)",
-        jwt.custom.email,
+        jwt.custom.email.as_str(),
         &key_string
     )
     .execute(RELATIONAL_DATABASE.get().unwrap())
@@ -53,17 +53,17 @@ pub struct Keys {
 
 #[tracing::instrument]
 pub async fn get_all_api_keys(
-    Extension(jwt): Extension<JWTClaims<Claims>>,
+    Extension(jwt): Extension<JWTClaims<Claims<'_>>>,
 ) -> Result<impl IntoResponse, ApiKeyError> {
     let keys: Vec<Keys> = sqlx::query_as!(
         Keys,
         "SELECT apiKey FROM Api where customerEmail = $1",
-        jwt.custom.email
+        jwt.custom.email.as_str()
     )
     .fetch_all(RELATIONAL_DATABASE.get().unwrap())
     .await?;
 
-    Ok((StatusCode::OK, sonic_rs::to_string(&keys)?))
+    Ok((StatusCode::OK, serde_json::to_string(&keys)?))
 }
 
 #[tracing::instrument]
@@ -80,7 +80,7 @@ pub enum ApiKeyError {
     #[error(transparent)]
     DatabaseError(#[from] sqlx::Error),
     #[error(transparent)]
-    JsonError(#[from] sonic_rs::Error),
+    JsonError(#[from] serde_json::Error),
     #[error("Failed to find key in database.")]
     KeyNotFound,
     #[error("You have reached your maximum allocation of API keys.")]

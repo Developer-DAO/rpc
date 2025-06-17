@@ -11,12 +11,12 @@ pub struct JsonRpcResponse<T> {
 pub struct JsonRpcRequest {
     pub jsonrpc: String,
     pub method: String,
-    pub params: Option<sonic_rs::Value>,
+    pub params: Option<serde_json::Value>,
     pub id: u16,
 }
 
 impl JsonRpcRequest {
-    pub fn new(method: String, params: Option<sonic_rs::Value>, id: u16) -> Self {
+    pub fn new(method: String, params: Option<serde_json::Value>, id: u16) -> Self {
         Self {
             jsonrpc: "2.0".to_owned(),
             method,

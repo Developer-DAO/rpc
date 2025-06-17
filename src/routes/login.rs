@@ -1,6 +1,6 @@
 use super::{
     siwe::Siwe,
-    types::{Claims, JWT_KEY},
+    types::{Claims, EmailAddress, JWT_KEY, Password, SiweNonce},
 };
 use crate::{
     database::{
@@ -19,31 +19,32 @@ use axum::{
 use jwt_simple::{algorithms::MACLike, claims::JWTClaims, reexports::coarsetime::Duration};
 use serde::{Deserialize, Serialize};
 use siwe::{Message, VerificationError, VerificationOpts};
+use sqlx::prelude::FromRow;
 use thiserror::Error;
 use time::OffsetDateTime;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct LoginRequest {
-    pub(crate) email: String,
-    pub(crate) password: String,
+pub struct LoginRequest<'a> {
+    pub(crate) email: EmailAddress<'a>,
+    pub(crate) password: Password<'a>,
 }
 
-pub struct SiweLogin {
-    pub email: String,
+#[derive(FromRow)]
+pub struct SiweLogin<'a> {
+    pub email: EmailAddress<'a>,
     pub wallet: Option<String>,
     pub role: Role,
-    pub nonce: Option<String>,
+    pub nonce: SiweNonce<'a>,
 }
 
-#[tracing::instrument]
 pub async fn refresh(
-    Extension(jwt): Extension<JWTClaims<Claims>>,
+    Extension(jwt): Extension<JWTClaims<Claims<'_>>>,
 ) -> Result<impl IntoResponse, LoginError> {
     let user = sqlx::query_as!(
         Customers,
         r#"SELECT email, wallet, password, role as "role!:Role", verificationCode, activated FROM Customers 
         WHERE email = $1"#,
-        &jwt.custom.email,
+        jwt.custom.email.as_str(),
     )
     .fetch_one(RELATIONAL_DATABASE.get().unwrap())
     .await?;
@@ -60,7 +61,7 @@ pub async fn refresh(
     let mut headers = HeaderMap::new();
     headers.insert(
         SET_COOKIE,
-        HeaderValue::from_str(&format!("jwt={}", auth)).unwrap(),
+        HeaderValue::from_str(&format!("jwt={auth}")).unwrap(),
     );
     headers.append(SET_COOKIE, HeaderValue::from_str("Secure").unwrap());
     headers.append(SET_COOKIE, HeaderValue::from_str("HttpOnly").unwrap());
@@ -86,19 +87,17 @@ pub async fn user_login_siwe(Json(payload): Json<Siwe>) -> Result<impl IntoRespo
     .await?
     .ok_or_else(|| LoginError::InvalidAddress)?;
 
-    let nonce = customer.nonce.ok_or_else(|| LoginError::MissingNonce)?;
-
-    let rpc = ProviderBuilder::new().on_http(ETHEREUM_ENDPOINT[0].as_str().parse().unwrap());
+    let rpc = ProviderBuilder::new().connect_http(ETHEREUM_ENDPOINT[0].as_str().parse().unwrap());
 
     let domain = if cfg!(feature = "dev") {
-        "localhost"
+        "localhost:5173"
     } else {
         "Developer DAO Cloud"
     };
 
     let verification_opts = VerificationOpts {
         domain: Some(domain.parse().unwrap()),
-        nonce: Some(nonce),
+        nonce: Some(customer.nonce.to_string()),
         timestamp: Some(OffsetDateTime::now_utc()),
         rpc_provider: Some(rpc),
     };
@@ -107,7 +106,7 @@ pub async fn user_login_siwe(Json(payload): Json<Siwe>) -> Result<impl IntoRespo
 
     let user_info = Claims {
         role: customer.role,
-        email: customer.email,
+        email: customer.email.to_owned(),
         wallet: Some(address),
     };
     let claims = jwt_simple::claims::Claims::with_custom_claims(user_info, Duration::from_hours(2));
@@ -117,7 +116,7 @@ pub async fn user_login_siwe(Json(payload): Json<Siwe>) -> Result<impl IntoRespo
     let mut headers = HeaderMap::new();
     headers.insert(
         SET_COOKIE,
-        HeaderValue::from_str(&format!("jwt={}", auth)).unwrap(),
+        HeaderValue::from_str(&format!("jwt={auth}")).unwrap(),
     );
     headers.append(SET_COOKIE, HeaderValue::from_str("Secure").unwrap());
     headers.append(SET_COOKIE, HeaderValue::from_str("HttpOnly").unwrap());
@@ -126,18 +125,18 @@ pub async fn user_login_siwe(Json(payload): Json<Siwe>) -> Result<impl IntoRespo
         HeaderValue::from_str("SameSite=Strict").unwrap(),
     );
 
-    Ok((StatusCode::OK, headers))
+    Ok((StatusCode::OK, headers, customer.email.to_string()))
 }
 
 #[tracing::instrument(skip(payload), fields(email = %payload.email))]
 pub async fn user_login(
-    Json(payload): Json<LoginRequest>,
+    Json(payload): Json<LoginRequest<'_>>,
 ) -> Result<impl IntoResponse, LoginError> {
     let user = sqlx::query_as!(
         Customers,
         r#"SELECT email, wallet, password, role as "role!:Role", verificationCode, activated FROM Customers 
         WHERE email = $1"#,
-        &payload.email,
+        &payload.email.as_str(),
     )
     .fetch_optional(RELATIONAL_DATABASE.get().unwrap())
     .await?
@@ -145,7 +144,7 @@ pub async fn user_login(
 
     let plaintext_password = payload.password.as_bytes();
     let hashed_password =
-        PasswordHash::new(&user.password).map_err(|_| LoginError::HashingError)?;
+        PasswordHash::new(user.password.as_str()).map_err(|_| LoginError::HashingError)?;
     Argon2::default()
         .verify_password(plaintext_password, &hashed_password)
         .map_err(|_| LoginError::InvalidEmailOrPassword)?;
@@ -166,7 +165,7 @@ pub async fn user_login(
     let mut headers = HeaderMap::new();
     headers.insert(
         SET_COOKIE,
-        HeaderValue::from_str(&format!("jwt={}", auth)).unwrap(),
+        HeaderValue::from_str(&format!("jwt={auth}")).unwrap(),
     );
     headers.append(SET_COOKIE, HeaderValue::from_str("Secure").unwrap());
     headers.append(SET_COOKIE, HeaderValue::from_str("HttpOnly").unwrap());
@@ -224,7 +223,7 @@ pub mod tests {
     }
 
     use crate::{
-        Database, Email, JWTKey, TcpListener,
+        Database, EmailLogin, JWTKey, TcpListener,
         database::types::RELATIONAL_DATABASE,
         middleware::jwt_auth::verify_jwt,
         register_user,
@@ -232,7 +231,7 @@ pub mod tests {
             activate::{ActivationRequest, activate_account},
             api_keys::generate_api_keys,
             login::LoginRequest,
-            types::RegisterUser,
+            types::{EmailAddress, Password, RegisterUser},
         },
         user_login,
     };
@@ -244,7 +243,7 @@ pub mod tests {
         dotenv().unwrap();
         JWTKey::init().unwrap();
         Database::init().await.unwrap();
-        Email::init().unwrap();
+        EmailLogin::init().unwrap();
 
         tokio::spawn(async move {
             let app = Router::new()
@@ -295,8 +294,8 @@ pub mod tests {
             .unwrap();
 
         let lr = LoginRequest {
-            email: "abc@aol.com".to_string(),
-            password: "test".to_string(),
+            email: EmailAddress("abc@aol.com".into()),
+            password: Password("test".into()),
         };
 
         let ddrpc_client = reqwest::Client::builder()
