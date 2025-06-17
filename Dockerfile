@@ -10,9 +10,14 @@ COPY --from=planner /app/recipe.json recipe.json
 # Build dependencies - this is the caching Docker layer!
 RUN cargo chef cook --release --recipe-path recipe.json
 # Build application
-COPY . .
+COPY ./Cargo.lock ./Cargo.lock
+COPY ./Cargo.toml ./Cargo.toml
+COPY ./src ./src
+COPY ./.sqlx ./.sqlx
+COPY ./migrations ./migrations
 #RUN cargo build --release --bin app
 #RUN cargo install sqlx-cli
+RUN apt-get update
 RUN cargo build --release
 
 ENTRYPOINT ["cargo", "run", "--release"]

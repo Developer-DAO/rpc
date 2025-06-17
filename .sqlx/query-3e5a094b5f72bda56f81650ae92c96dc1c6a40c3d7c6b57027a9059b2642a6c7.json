@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE Customers SET nonce = $1 where wallet = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3e5a094b5f72bda56f81650ae92c96dc1c6a40c3d7c6b57027a9059b2642a6c7"
+}
