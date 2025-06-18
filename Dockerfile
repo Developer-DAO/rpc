@@ -26,12 +26,13 @@ RUN cargo build --release --target x86_64-unknown-linux-musl
 RUN ls -al
 RUN ls -al /app/target
 RUN ls -al /app/target/release
+RUN ls -al /app/target/x86_64-unknown-linux-musl
 
 # Create a minimal image with the compiled binary
 #FROM gcr.io/distroless/static AS runtime
 FROM scratch
 WORKDIR /app
-COPY --from=builder /app/target/release/dd_rpc /app/dd_rpc
+COPY --from=builder /app/target/x86_64-unknown-linux-musl/dd_rpc /app/dd_rpc
 
 ENTRYPOINT ["/app/dd_rpc"]
 #ENTRYPOINT ["/bin/sh"]
