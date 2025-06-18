@@ -7,17 +7,23 @@ RUN cargo chef prepare --recipe-path recipe.json
 
 FROM chef AS builder
 COPY --from=planner /app/recipe.json recipe.json
-# Build dependencies - this is the caching Docker layer!
-RUN cargo chef cook --release --recipe-path recipe.json
+# Build dependencies
+RUN rustup target add x86_64-unknown-linux-musl 
+RUN cargo chef cook --release --target x86_64-unknown-linux-musl --recipe-path recipe.json
 # Build application
 COPY ./Cargo.lock ./Cargo.lock
 COPY ./Cargo.toml ./Cargo.toml
 COPY ./src ./src
 COPY ./.sqlx ./.sqlx
 COPY ./migrations ./migrations
-#RUN cargo build --release --bin app
-#RUN cargo install sqlx-cli
 RUN apt-get update
-RUN cargo build --release
+RUN cargo build --release --target x86_64-unknown-linux-musl
 
-ENTRYPOINT ["cargo", "run", "--release"]
+# Create a minimal image with the compiled binary
+#FROM gcr.io/distroless/static AS runtime
+FROM scratch
+WORKDIR /app
+COPY --from=builder /app/target/release/dd_rpc /app/dd_rpc
+
+ENTRYPOINT ["/app/dd_rpc"]
+#ENTRYPOINT ["/bin/sh"]
