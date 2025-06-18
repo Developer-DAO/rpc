@@ -45,7 +45,6 @@ static GLOBAL: MiMalloc = MiMalloc;
 
 #[tokio::main]
 async fn main() {
-    dotenv().unwrap();
     //    PoktChains::init_deployment_url();
     JWTKey::init().unwrap();
     Database::init().await.unwrap();
