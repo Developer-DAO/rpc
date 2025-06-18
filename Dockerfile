@@ -33,4 +33,6 @@ FROM debian:bookworm-slim
 WORKDIR /app
 COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/dd_rpc /app/dd_rpc
 
-ENTRYPOINT ["RUST_BACKTRACE=1", "/app/dd_rpc"]
+ENV RUST_BACKTRACE="1"
+
+ENTRYPOINT ["/app/dd_rpc"]
