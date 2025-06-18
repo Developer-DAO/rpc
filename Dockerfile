@@ -26,13 +26,16 @@ RUN apt-get install musl-tools -y
 ENV CC_x86_64_unknown_linux_musl="x86_64-linux-musl-gcc"
 RUN cargo build --release --target x86_64-unknown-linux-musl
 
+# Test without smaller image
+ENV RUST_BACKTRACE="full"
+
+ENTRYPOINT [ "/app/target/x86_64-unknown-linux-musl/release/dd_rpc" ]
+
 # Create a minimal image with the compiled binary
 #FROM gcr.io/distroless/static AS runtime
 #FROM scratch
-FROM debian:bookworm-slim
-WORKDIR /app
-COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/dd_rpc /app/dd_rpc
+# FROM debian:bookworm-slim
+# WORKDIR /app
+# COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/dd_rpc /app/dd_rpc
 
-ENV RUST_BACKTRACE="full"
-
-ENTRYPOINT ["/app/dd_rpc"]
+#ENTRYPOINT ["/app/dd_rpc"]
