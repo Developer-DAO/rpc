@@ -27,6 +27,7 @@ RUN ls -al
 RUN ls -al /app/target
 RUN ls -al /app/target/release
 RUN ls -al /app/target/x86_64-unknown-linux-musl
+RUN ls -al /app/target/x86_64-unknown-linux-musl/release
 
 # Create a minimal image with the compiled binary
 #FROM gcr.io/distroless/static AS runtime
