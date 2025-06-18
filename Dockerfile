@@ -23,6 +23,9 @@ RUN apt-get update
 RUN apt-get install musl-tools -y
 ENV CC_x86_64_unknown_linux_musl="x86_64-linux-musl-gcc"
 RUN cargo build --release --target x86_64-unknown-linux-musl
+RUN ls -al
+RUN ls -al /app/target
+RUN ls -al /app/target/release
 
 # Create a minimal image with the compiled binary
 #FROM gcr.io/distroless/static AS runtime
