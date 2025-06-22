@@ -22,13 +22,13 @@ jobs:
       -
         name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-      -
-        name: Build and export 
-        uses: docker/build-push-action@v6
-        with:
-          push: false
-          load: true
-          tags: Developer-DAO/rpc:latest
+    #   -
+    #     name: Build and export 
+    #     uses: docker/build-push-action@v6
+    #     with:
+    #       push: false
+    #       load: true
+    #       tags: Developer-DAO/rpc:latest
 
     #   - 
     #     name: Test the container
@@ -38,6 +38,6 @@ jobs:
         name: Build and push 
         uses: docker/build-push-action@v6
         with:
-          push: false
-          load: true
+          push: true
+          load: false
           tags: Developer-DAO/rpc:latest
