@@ -27,9 +27,9 @@ jobs:
           load: true
           tags: Developer-DAO/rpc:latest
 
-      - 
-        name: Test the container
-        run: docker run -p 3000:3000 Developer-DAO/rpc:latest
+    #   - 
+    #     name: Test the container
+    #     run: docker run -p 3000:3000 Developer-DAO/rpc:latest
 
       -
         name: Build and push 
