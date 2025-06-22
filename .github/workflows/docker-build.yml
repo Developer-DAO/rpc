@@ -40,4 +40,4 @@ jobs:
         with:
           push: true
           load: false
-          tags: ghcr.io/Developer-DAO/rpc:latest
+          tags: ghcr.io/developer-dao/rpc:latest
