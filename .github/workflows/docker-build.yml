@@ -2,6 +2,8 @@ name: docker-build-test
 
 on:
   push:
+    branches: 
+        - "**"
 
 jobs:
   docker:
@@ -23,9 +25,19 @@ jobs:
         name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       -
+        name: Determine Docker tags
+        id: vars
+        run: |
+          if [ "${{ github.ref }}" == "refs/heads/main" ]; then
+            echo "TAGS=ghcr.io/developer-dao/rpc:latest,ghcr.io/developer-dao/rpc:${{ github.sha }}" >> $GITHUB_ENV
+          else
+            BRANCH_NAME=$(echo "${{ github.ref }}" | sed 's|refs/heads/||' | tr '/' '-' | tr '[:upper:]' '[:lower:]')
+            echo "TAGS=ghcr.io/developer-dao/rpc:${BRANCH_NAME}-${{ github.sha }}" >> $GITHUB_ENV
+          fi
+      -
         name: Build and push 
         uses: docker/build-push-action@v6
         with:
           push: true
           load: false
-          tags: ghcr.io/developer-dao/rpc:latest
+          tags: ${{ env.TAGS }}
