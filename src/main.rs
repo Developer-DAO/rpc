@@ -37,7 +37,6 @@ use tracing_subscriber::fmt::format::FmtSpan;
 
 pub mod database;
 pub mod eth_rpc;
-pub mod json_rpc;
 pub mod middleware;
 pub mod routes;
 
@@ -46,7 +45,6 @@ static GLOBAL: MiMalloc = MiMalloc;
 
 #[tokio::main]
 async fn main() {
-    dotenv().unwrap();
     //    PoktChains::init_deployment_url();
     JWTKey::init().unwrap();
     Database::init().await.unwrap();

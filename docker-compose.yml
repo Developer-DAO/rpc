@@ -11,6 +11,8 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+  
 volumes:
   postgres_data:
