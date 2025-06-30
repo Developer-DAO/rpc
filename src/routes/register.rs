@@ -177,7 +177,7 @@ pub mod test {
 
         tokio::spawn(async move {
             let app = Router::new().route("/api/register", post(register_user));
-            let listener = TcpListener::bind("0.0.0.0:3000").await.unwrap();
+            let listener = TcpListener::bind("0.0.0.0:3111").await.unwrap();
             axum::serve(listener, app).await.unwrap();
         });
 
