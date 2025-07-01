@@ -14,5 +14,26 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
   
+  ethereum:
+    image: ethereum/client-go:stable
+    ports:
+      - "8545:8545"
+      - "30303:30303"
+    command: --http --http.addr 0.0.0.0 --http.port 8545 --http.api eth,net,web3 --syncmode snap
+
+  dd_rpc: 
+    image: ghcr.io/developer-dao/rpc:latest
+    ports: 
+      - "8080:80"
+    environment:
+      - DATABASE_URL=postgresql://ddrpcdev:ddrpc123@postgres:5432/ddrpc
+      - ETHEREUM_ENDPOINT=http://ethereum:8545
+      - SMTP_USERNAME=fake@test.com
+      - SMTP_PASSWORD=TEST
+      - JWT_KEY=0cd8a9ca80c521ce59f4663bfc5379b7a4acc11c34d8852dfc9a71b6dba00985
+    depends_on:
+      - postgres
+      - ethereum
+
 volumes:
   postgres_data:
