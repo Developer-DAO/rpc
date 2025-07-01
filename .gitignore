@@ -1,3 +1,20 @@
 /target
 .env
 ~/.config/nvim-data/undodir/
+
+# Terraform state
+*.tfstate
+*.tfstate.*
+crash.log
+*.tfvars
+*.tfvars.json
+drift.log
+.terraform/
+.terraform.lock.hcl
+
+# Local execution plan files
+plan.out
+
+# Sensitive files
+*.pem
+*.key
