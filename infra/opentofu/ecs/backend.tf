@@ -1,11 +1,10 @@
 terraform {
-  #     backend "s3" { # TODO: Migrate to S3 when AWS account and S3 bucket is set up
-  #         bucket         = "dd-rpc-terraform-state"
-  #         key            = "ecs/terraform.tfstate"
-  #         region         = var.region
-  #         encrypt        = true
-  #     }
-  backend "local" {}
+      backend "s3" {
+          bucket         = "dd-test-rpc-terraform-state"
+          key            = "ecs/terraform.tfstate"
+          region         = "us-east-2"
+          encrypt        = true
+      }
 
   required_version = ">= 1.0.0"
   required_providers {
