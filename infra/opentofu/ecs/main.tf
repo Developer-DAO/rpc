@@ -1,9 +1,11 @@
 # Reference VPC outputs from the vpc folder's state
 # TODO: Migrate to S3 when AWS account and S3 bucket is set up
 data "terraform_remote_state" "vpc" {
-  backend = "local"
+  backend = "s3"
   config = {
-    path = "../vpc/terraform.tfstate"
+      bucket = "dd-test-rpc-terraform-state"
+      key    = "vpc/terraform.tfstate"
+      region = "us-east-2"
   }
 }
 
