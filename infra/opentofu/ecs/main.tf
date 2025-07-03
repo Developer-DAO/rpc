@@ -85,7 +85,7 @@ module "ecs" {
           cpu       = 512
           memory    = 1024
           essential = true
-          image     = "ghcr.io/developer-dao/rpc:latest"
+          image     = var.rpc_image
           port_mappings = [
             {
               name          = "dd-rpc"
