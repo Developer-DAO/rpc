@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - dev
+      - ecs-cd
 
 jobs:
   build-and-deploy:
