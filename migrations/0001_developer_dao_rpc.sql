@@ -49,4 +49,38 @@ CREATE INDEX IF NOT EXISTS idx_customer_email ON Payments (customerEmail);
 
 -- pay as you go ** 
 -- min deposit ? 
--- top up notifications 
+-- top up notifications
+
+CREATE TABLE event_subscriptions (
+    id UUID PRIMARY KEY,
+    user_email VARCHAR(255) REFERENCES Customers(email),
+    chain_id TEXT NOT NULL,
+    contract_address TEXT NOT NULL,
+    event_signature TEXT, -- NULL = all events
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(user_email, chain_id, contract_address, event_signature)
+);
+
+CREATE TABLE tracked_events (
+    id UUID PRIMARY KEY,
+    chain_id TEXT NOT NULL,
+    contract_address TEXT NOT NULL,
+    block_number BIGINT NOT NULL,
+    tx_hash TEXT NOT NULL,
+    log_index INTEGER NOT NULL,
+    event_signature TEXT NOT NULL,
+    event_data JSONB NOT NULL,
+    block_timestamp TIMESTAMPTZ NOT NULL,
+    confirmed BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(chain_id, tx_hash, log_index)
+);
+
+-- Track sync progress per contract
+CREATE TABLE event_sync_state (
+  chain_id TEXT NOT NULL,
+  contract_address TEXT NOT NULL,
+  last_synced_block BIGINT NOT NULL,
+  last_synced_at TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY(chain_id, contract_address)
+);

@@ -34,11 +34,29 @@ use tokio::net::TcpListener;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::info;
 use tracing_subscriber::fmt::format::FmtSpan;
+use crate::routes::event_tracking::tracker::{get_events, subscribe_to_event, unsubscribe_from_event};
+use tokio::spawn;
 
 pub mod database;
 pub mod eth_rpc;
 pub mod middleware;
 pub mod routes;
+
+struct BlockchainIndexer;
+
+impl BlockchainIndexer {
+    fn new() -> Self {
+        Self
+    }
+
+    async fn run(&self) {
+        info!("Starting blockchain indexer...");
+        loop {
+            // TODO: Implement indexing logic
+            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+        }
+    }
+}
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
@@ -72,6 +90,13 @@ async fn main() {
         .route_layer(from_fn(validate_subscription_and_update_user_calls))
         .layer(cors_rpc);
 
+    let event_tracker = Router::new()
+        .route("/api/event",
+               get(get_events)
+               .post(subscribe_to_event)
+               .delete(unsubscribe_from_event));
+    // .route_layer(from_fn(verify_jwt));
+
     let api_keys = Router::new()
         .route("/api/keys", get(get_all_api_keys).post(generate_api_keys))
         .route("/api/keys/{key}", delete(delete_key))
@@ -103,6 +128,7 @@ async fn main() {
         .merge(api_keys)
         .merge(siwe)
         .merge(payments)
+        .merge(event_tracker)
         .layer(cors_api)
         .merge(relayer);
 
@@ -110,6 +136,14 @@ async fn main() {
     //     refill_calls_and_renew_plans().await?;
     //     Ok::<(), RpcAuthErrors>(())
     // });
+
+    // /// The indexer to manage the subscribed events.
+    // TODO! allow for issuing commands to the indexer from elsewhere to manage it at runtime
+    // let indexer = BlockchainIndexer::new();
+    // spawn(async move {
+    //     indexer.run().await;
+    // });
+
 
     info!("Initialized D_D RPC on 0.0.0.0:3000");
     let listener = TcpListener::bind("0.0.0.0:3000").await.unwrap();

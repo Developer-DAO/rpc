@@ -17,7 +17,7 @@ rand = "0.8.5"
 secp256k1 = {version = "0.28.2", features = ["rand", "global-context"]}
 serde = {version = "1.0.195", features = ["derive"]}
 siwe = { git = "https://github.com/crypdoughdoteth/siwe-rs", rev = "407f2e917185bc88ae70c65a5e4f92acf015779b", features = ["alloy", "serde"] }
-sqlx = {version = "0.8", features = ["postgres", "macros", "runtime-tokio", "tls-rustls", "time"]}
+sqlx = {version = "0.8", features = ["postgres", "macros", "runtime-tokio", "tls-rustls", "time", "uuid"]}
 time = {version = "0.3.36" , features = ["serde"]}
 tokio = {version = "1.35.1", features = ["rt-multi-thread", "macros"]}
 tokio-test = "0.4.3"
@@ -32,6 +32,8 @@ hyper-util = { version = "0.1", features = ["full"] }
 reqwest = {version = "0.12.5", features = ["json", "rustls-tls", "cookies", "stream"]}
 http-body-util = "0.1"
 serde_json = "1.0.140"
+uuid = { version = "1.18.1", features = ["v4", "serde"] }
+url = "2.5.4"
 
 [dev-dependencies]
 alloy = {version = "1.0", features = ["node-bindings", "network", "rpc-types", "signer-local"]}

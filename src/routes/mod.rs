@@ -7,3 +7,4 @@ pub mod register;
 pub mod relayer;
 pub mod siwe;
 pub mod types;
+pub mod event_tracking;
