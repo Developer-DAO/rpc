@@ -240,7 +240,7 @@ pub mod tests {
 
     #[tokio::test]
     async fn login() {
-        dotenv().unwrap();
+        let _ = dotenv();
         JWTKey::init().unwrap();
         Database::init().await.unwrap();
         EmailLogin::init().unwrap();

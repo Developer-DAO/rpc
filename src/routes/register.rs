@@ -193,7 +193,7 @@ pub mod test {
 
     #[tokio::test]
     async fn register() {
-        dotenv().unwrap();
+        let _ = dotenv();
         JWTKey::init().unwrap();
         Database::init().await.unwrap();
         EmailLogin::init().unwrap();
@@ -234,7 +234,7 @@ pub mod test {
 
     #[tokio::test]
     async fn mail() {
-        dotenv().unwrap();
+        let _ = dotenv();
 
         let verification_code = generate_verification_code(8);
 

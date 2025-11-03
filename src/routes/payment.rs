@@ -723,7 +723,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_payment() {
-        dotenv().unwrap();
+        let _ = dotenv();
         JWTKey::init().unwrap();
         Database::init().await.unwrap();
         EmailLogin::init().unwrap();
