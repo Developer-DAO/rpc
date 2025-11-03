@@ -1,18 +1,17 @@
 use super::types::RelayErrors;
 use crate::routes::relayer::types::{PoktChains, Relayer};
-use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
-use serde_json::Value;
+use axum::{body::Bytes, extract::Path, http::StatusCode, response::IntoResponse};
 use thiserror::Error;
 
 pub async fn route_call(
     Path(route_info): Path<[String; 2]>,
-    Json(body): Json<Value>,
+    body: Bytes,
 ) -> Result<impl IntoResponse, RouterErrors> {
     let raw_destination = route_info
         .first()
         .ok_or_else(|| RouterErrors::DestinationError)?;
     let dest = raw_destination.parse::<PoktChains>()?;
-    let result = dest.relay_transaction(&body).await?;
+    let result = dest.relay_transaction(body).await?;
     Ok((StatusCode::OK, result))
 }
 
@@ -41,10 +40,15 @@ pub mod test {
     async fn relay_test() {
         let body = json!({
             "jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id": 1
-        });
+        })
+        .to_string()
+        .leak()
+        .as_bytes();
+
+        let bytes = axum::body::Bytes::from_static(body);
         let chain = "anvil";
         let dest = chain.parse::<PoktChains>().unwrap();
-        let res = dest.relay_transaction(&body).await;
+        let res = dest.relay_transaction(bytes).await;
         assert!(res.is_ok());
         let text = res.unwrap();
         println!("{text:?}");

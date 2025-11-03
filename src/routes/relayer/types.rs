@@ -1,6 +1,5 @@
-use http::HeaderValue;
+use http::{HeaderValue, header::CONTENT_TYPE};
 use reqwest::Client;
-use serde::Serialize;
 use std::{
     fmt::{self, Display, Formatter},
     future::Future,
@@ -15,8 +14,11 @@ pub static GATEWAY_ENDPOINT: LazyLock<&'static str> = LazyLock::new(|| {
     .leak()
 });
 
-pub trait Relayer<T> {
-    fn relay_transaction(&self, body: &T) -> impl Future<Output = Result<String, RelayErrors>>;
+pub trait Relayer {
+    fn relay_transaction(
+        &self,
+        body: axum::body::Bytes,
+    ) -> impl Future<Output = Result<String, RelayErrors>>;
 }
 
 impl From<PoktChains> for HeaderValue {
@@ -208,16 +210,14 @@ impl PoktChains {
     }
 }
 
-impl<T> Relayer<T> for PoktChains
-where
-    T: Serialize,
-{
-    async fn relay_transaction(&self, body: &T) -> Result<String, RelayErrors> {
+impl Relayer for PoktChains {
+    async fn relay_transaction(&self, body: axum::body::Bytes) -> Result<String, RelayErrors> {
         if cfg!(test) {
             let provider = dotenvy::var("SEPOLIA_PROVIDER").expect("SEPOLIA_PROVIDER not found");
             Ok(Client::new()
                 .post(&provider)
-                .json(body)
+                .header(CONTENT_TYPE, HeaderValue::from_static("application/json"))
+                .body(body)
                 .send()
                 .await?
                 .text()
@@ -225,8 +225,9 @@ where
         } else {
             Ok(Client::new()
                 .post(*GATEWAY_ENDPOINT)
+                .header(CONTENT_TYPE, HeaderValue::from_static("application/json"))
                 .header("target-service-id", self.id())
-                .json(body)
+                .body(body)
                 .send()
                 .await?
                 .text()

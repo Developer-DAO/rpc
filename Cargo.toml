@@ -29,7 +29,7 @@ thiserror = "1.0.63"
 mimalloc = "0.1.45"
 hyper = "1.6.0"
 hyper-util = { version = "0.1", features = ["full"] }
-reqwest = { version = "0.12.5", features = ["json", "rustls-tls", "cookies", "stream"] }
+reqwest = { version = "0.12.24", features = ["json", "rustls-tls", "cookies", "stream"] }
 http-body-util = "0.1"
 serde_json = "1.0.140"
 tokio-tungstenite = { version = "0.26.2", features = ["native-tls"] }
