@@ -56,7 +56,7 @@ jobs:
             - name: install sqlx-cli
               run: cargo install sqlx-cli
             - name: create db
-              run: sqlx database create
+              run: sqlx database create --database-url postgres://crypdough:testing@localhost:5432/ddrpc
             - name: migrate schema
               run: sqlx migrate run
             - name: check
