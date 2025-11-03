@@ -55,12 +55,8 @@ jobs:
               run: sqlx migrate run --database-url postgres://crypdough:testing@localhost:5432/ddrpc
             - name: check
               run: cargo check --workspace ${{ matrix.flags }}
-            - name: anvil
-              run: curl -L https://foundry.paradigm.xyz | bash 
-            - name: source env
-              run: source /home/runner/.bashrc
-            - name: foundryup
-              run: foundryup
+            - name: Install Foundry
+              uses: foundry-rs/foundry-toolchain@v1
             - name: test
               env: 
                   DATABASE_URL: postgres://crypdough:testing@localhost:5432/ddrpc
