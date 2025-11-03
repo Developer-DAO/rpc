@@ -16,7 +16,7 @@ async fn relay_benchmark() {
 fn test_relay_pocket(c: &mut Criterion) {
     let mut group = c.benchmark_group("Relay transaction");
     group.sample_size(10);
-    group.bench_function("Pocket Relay Bench", |b| b.iter(|| relay_benchmark()));
+    group.bench_function("Pocket Relay Bench", |b| b.iter(relay_benchmark));
 
 
 }

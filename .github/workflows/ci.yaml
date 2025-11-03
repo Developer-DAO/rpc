@@ -58,7 +58,7 @@ jobs:
             - name: create db
               run: sqlx database create --database-url postgres://crypdough:testing@localhost:5432/ddrpc
             - name: migrate schema
-              run: sqlx migrate run
+              run: sqlx migrate run --database-url postgres://crypdough:testing@localhost:5432/ddrpc
             - name: check
               run: cargo check --workspace ${{ matrix.flags }}
             - name: test
