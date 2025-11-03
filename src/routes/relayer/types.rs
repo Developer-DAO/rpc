@@ -1,4 +1,5 @@
 use http::{HeaderValue, header::CONTENT_TYPE};
+use axum::body::{Body, Bytes};
 use reqwest::Client;
 use std::{
     fmt::{self, Display, Formatter},
@@ -17,8 +18,8 @@ pub static GATEWAY_ENDPOINT: LazyLock<&'static str> = LazyLock::new(|| {
 pub trait Relayer {
     fn relay_transaction(
         &self,
-        body: axum::body::Bytes,
-    ) -> impl Future<Output = Result<String, RelayErrors>>;
+        body: Bytes,
+    ) -> impl Future<Output = Result<Body, RelayErrors>>;
 }
 
 impl From<PoktChains> for HeaderValue {
@@ -211,27 +212,31 @@ impl PoktChains {
 }
 
 impl Relayer for PoktChains {
-    async fn relay_transaction(&self, body: axum::body::Bytes) -> Result<String, RelayErrors> {
+    async fn relay_transaction(&self, body: Bytes) -> Result<Body, RelayErrors> {
         if cfg!(test) {
             let provider = dotenvy::var("SEPOLIA_PROVIDER").expect("SEPOLIA_PROVIDER not found");
-            Ok(Client::new()
+            let byte_stream = Client::new()
                 .post(&provider)
                 .header(CONTENT_TYPE, HeaderValue::from_static("application/json"))
                 .body(body)
                 .send()
                 .await?
-                .text()
-                .await?)
+                .error_for_status()?
+                .bytes_stream();
+            let body = Body::from_stream(byte_stream);
+            Ok(body)
         } else {
-            Ok(Client::new()
+            let byte_stream = Client::new()
                 .post(*GATEWAY_ENDPOINT)
                 .header(CONTENT_TYPE, HeaderValue::from_static("application/json"))
                 .header("target-service-id", self.id())
                 .body(body)
                 .send()
                 .await?
-                .text()
-                .await?)
+                .error_for_status()?
+                .bytes_stream();
+            let body = Body::from_stream(byte_stream);
+            Ok(body)
         }
     }
 }

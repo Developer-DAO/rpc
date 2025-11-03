@@ -34,6 +34,7 @@ impl IntoResponse for RouterErrors {
 #[cfg(test)]
 pub mod test {
     use crate::routes::relayer::types::{PoktChains, Relayer};
+    use http_body_util::BodyExt;
     use serde_json::json;
 
     #[tokio::test]
@@ -50,7 +51,8 @@ pub mod test {
         let dest = chain.parse::<PoktChains>().unwrap();
         let res = dest.relay_transaction(bytes).await;
         assert!(res.is_ok());
-        let text = res.unwrap();
+        let text = res.unwrap().collect().await.unwrap().to_bytes().to_vec();
+        let text = String::from_utf8(text).unwrap();
         println!("{text:?}");
     }
 }
