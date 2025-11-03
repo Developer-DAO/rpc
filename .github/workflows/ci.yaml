@@ -55,10 +55,13 @@ jobs:
               run: sqlx migrate run --database-url postgres://crypdough:testing@localhost:5432/ddrpc
             - name: check
               run: cargo check --workspace ${{ matrix.flags }}
+            - name: Anvil
+              run: curl -L https://foundry.paradigm.xyz | bash && foundryup
             - name: test
               env: 
                   DATABASE_URL: postgres://crypdough:testing@localhost:5432/ddrpc
                   ETHEREUM_ENDPOINT: ${{ secrets.ETHEREUM_ENDPOINT }}
+                  SEPOLIA_PROVIDER: ${{ secrets.SEPOLIA_PROVIDER }}
                   SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
                   SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
                   JWT_KEY: ${{ secrets.JWT_KEY }}
