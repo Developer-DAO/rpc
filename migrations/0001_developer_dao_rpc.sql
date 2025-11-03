@@ -20,7 +20,9 @@ CREATE TABLE IF NOT EXISTS RpcPlans (
     calls BIGINT CHECK (calls >= 0) NOT NULL default 0,
     plan PLAN NOT NULL DEFAULT 'free',
     created TIMESTAMPTZ GENERATED ALWAYS AS(('now'::timestamptz AT TIME ZONE 'UTC')) STORED NOT NULL,
-    expires TIMESTAMPTZ GENERATED ALWAYS AS(('now'::timestamptz AT TIME ZONE 'UTC') + INTERVAL '1 months') STORED NOT NULL
+    expires TIMESTAMPTZ GENERATED ALWAYS AS(('now'::timestamptz AT TIME ZONE 'UTC') + INTERVAL '1 months') STORED NOT NULL,
+    renew bool NOT NULL DEFAULT TRUE,
+    downgradeTo PLAN
 );
 
 CREATE TABLE IF NOT EXISTS Api (
@@ -45,7 +47,8 @@ CREATE TABLE IF NOT EXISTS Payments (
 
 -- registration (create account) -> select plan -> payments --tx_hash-> hits server -> confirm everything -> database + credit account 
 
-CREATE INDEX IF NOT EXISTS idx_customer_email ON Payments (customerEmail);
+CREATE INDEX IF NOT EXISTS idx_email_payment ON Payments (customerEmail);
+CREATE INDEX IF NOT EXISTS idx_email_rpc ON RpcPlans (email);
 
 -- pay as you go ** 
 -- min deposit ? 

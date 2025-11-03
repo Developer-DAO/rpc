@@ -1,0 +1,106 @@
+name: CI
+
+on:
+    push:
+      branches: 
+        - main 
+        - production
+        - staging
+        - ecs-cd
+    pull_request:
+      branches: 
+        - main 
+        - production
+        - staging
+        - ecs-cd
+
+env:
+    CARGO_TERM_COLOR: always
+
+jobs:
+    test:
+        name: test ${{ matrix.rust }} ${{ matrix.flags }}
+        runs-on: ubuntu-latest
+        services:
+            postgres:
+              image: postgres:18
+              env:
+                POSTGRES_USER: crypdough
+                POSTGRES_PASSWORD: testing
+              options: >-
+                --health-cmd pg_isready
+                --health-interval 10s
+                --health-timeout 5s
+                --health-retries 5
+              ports:
+                - 5432:5432
+        timeout-minutes: 30
+        strategy:
+            fail-fast: false
+            matrix:
+                rust: ["stable"] # MSRV
+        steps:
+            - uses: actions/checkout@v4
+            - uses: dtolnay/rust-toolchain@master
+              with:
+                  toolchain: ${{ matrix.rust }}
+            - uses: Swatinem/rust-cache@v2
+              with:
+                  cache-on-failure: true
+            - name: env
+              env: 
+                  DATABASE_URL: postgres://crypdough:testing@localhost:5432/ddrpc
+                  ETHEREUM_ENDPOINT: ${{ secrets.ETHEREUM_ENDPOINT }}
+                  SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+                  SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+                  JWT_KEY: ${{ secrets.JWT_KEY }}
+            - name: install sqlx-cli
+              run: cargo install sqlx-cli
+            - name: create db
+              run: sqlx database create
+            - name: migrate schema
+              run: sqlx migrate run
+            - name: check
+              run: cargo check --workspace ${{ matrix.flags }}
+            - name: test
+              run: cargo test --workspace ${{ matrix.flags }}
+
+    clippy:
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        steps:
+            - uses: actions/checkout@v3
+            - uses: dtolnay/rust-toolchain@stable
+              with:  
+                components: rustfmt
+                component: clippy
+            - uses: Swatinem/rust-cache@v2
+              with:
+                  cache-on-failure: true
+            - run: cargo clippy --workspace --all-targets
+              env:
+                  RUSTFLAGS: -Dwarnings
+
+    docs:
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        steps:
+            - uses: actions/checkout@v3
+            - uses: dtolnay/rust-toolchain@stable
+              with:  
+                components: rustfmt
+            - uses: Swatinem/rust-cache@v2
+              with:
+                  cache-on-failure: true
+            - run: cargo doc --workspace --no-deps --document-private-items
+              env:
+                  RUSTDOCFLAGS: "--cfg docsrs -D warnings"
+
+    fmt:
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        steps:
+            - uses: actions/checkout@v3
+            - uses: dtolnay/rust-toolchain@stable
+              with:
+                  components: rustfmt

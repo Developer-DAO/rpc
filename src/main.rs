@@ -1,7 +1,8 @@
 use crate::middleware::{
     jwt_auth::verify_jwt, rpc_service::validate_subscription_and_update_user_calls,
 };
-// use crate::routes::relayer::types::PoktChains;
+use crate::routes::payment::upgrade;
+use crate::routes::relayer::websockets::ws_handler;
 use crate::routes::types::{EmailLogin, JWTKey};
 use crate::routes::{
     activate::activate_account,
@@ -22,13 +23,10 @@ use axum::{
     routing::{get, post},
 };
 use database::types::Database;
-use dotenvy::dotenv;
 // use middleware::rpc_service::{RpcAuthErrors, refill_calls_and_renew_plans};
 use mimalloc::MiMalloc;
 use routes::login::{refresh, user_login_siwe};
-use routes::payment::{
-    apply_payment_to_plan, get_calls_and_balance, get_payments, process_ethereum_payment,
-};
+use routes::payment::{get_calls_and_balance, get_payments, process_ethereum_payment};
 use routes::siwe::{get_siwe_nonce, jwt_get_siwe_nonce, siwe_add_wallet};
 use tokio::net::TcpListener;
 use tower_http::cors::{Any, CorsLayer};
@@ -69,6 +67,7 @@ async fn main() {
 
     let relayer = Router::new()
         .route("/rpc/{chain}/{api_key}", post(route_call))
+        .route("/ws/{chain}/{api_key}", axum::routing::any(ws_handler))
         .route_layer(from_fn(validate_subscription_and_update_user_calls))
         .layer(cors_rpc);
 
@@ -78,7 +77,7 @@ async fn main() {
         .route_layer(from_fn(verify_jwt));
     let payments = Router::new()
         .route("/api/pay/eth", post(process_ethereum_payment))
-        .route("/api/pay/apply", post(apply_payment_to_plan))
+        .route("/api/upgrade", post(upgrade))
         .route("/api/balances", get(get_calls_and_balance))
         .route("/api/payments", get(get_payments))
         .route_layer(from_fn(verify_jwt));
@@ -105,11 +104,6 @@ async fn main() {
         .merge(payments)
         .layer(cors_api)
         .merge(relayer);
-
-    // tokio::spawn(async move {
-    //     refill_calls_and_renew_plans().await?;
-    //     Ok::<(), RpcAuthErrors>(())
-    // });
 
     info!("Initialized D_D RPC on 0.0.0.0:3000");
     let listener = TcpListener::bind("0.0.0.0:3000").await.unwrap();

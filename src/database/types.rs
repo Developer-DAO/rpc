@@ -62,7 +62,7 @@ pub struct Api<'a> {
     pub apikey: String,
 }
 
-#[derive(Debug, Clone, sqlx::Type, Serialize, Deserialize, Default, Copy)]
+#[derive(Debug, Clone, sqlx::Type, Serialize, Deserialize, Default, Copy, PartialEq, PartialOrd)]
 #[sqlx(type_name = "PLAN", rename_all = "lowercase")]
 pub enum Plan {
     #[default]
@@ -101,36 +101,37 @@ impl Display for Plan {
     }
 }
 
-impl FromStr for Plan {
-    type Err = ParsingError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let plan = match s {
-            "tier1" => Plan::Tier1,
-            "premier" => Plan::Tier2,
-            "tier3" => Plan::Tier3,
-            _ => Err(ParsingError(s.to_string(), "Plan"))?,
-        };
-
-        Ok(plan)
-    }
-}
 
 impl Plan {
     pub const FREE_TIER_LIMIT: u32 = 1_000_000;
     // Free Tier: 1M requests per month
-    pub const TIER_ONE: u32 = 10_000_000;
+    pub const TIER_ONE: u32 = 5_000_000;
     pub const TIER_ONE_COST: f64 = 40.0;
-    // Tier 1: 10M requests per month
+    // Tier 1: 5M requests per month
     // price: $40/mo
-    pub const TIER_TWO: u32 = 50_000_000;
+    pub const TIER_TWO: u32 = 30_000_000;
     pub const TIER_TWO_COST: f64 = 200.0;
-    // Tier 2: 50M requests per month
+    // Tier 2: 30M requests per month
     // price: $200/mo
-    pub const TIER_THREE: u32 = 250_000_000;
-    pub const TIER_THREE_COST: f64 = 900.0;
-    // Tier 3: 250M requests per month
-    // price: $900/mo
+    pub const TIER_THREE: u32 = 150_000_000;
+    pub const TIER_THREE_COST: f64 = 850.0;
+    // Tier 3: 150M requests per month
+    // price: $850/mo
+
+    /// prorate user plan based on the number of calls made 
+    /// this fn is pure, only calculates amount owed back
+    pub fn get_prorate_amount(&self, calls: i64) -> i64 {
+        let amount_per_plan = match self {
+           Plan::Free => 0,
+            Plan::Tier1 => 800,
+            Plan::Tier2 => 666,
+            Plan::Tier3 => 566,
+        };
+        // because the cost basis is per million units
+        // Prorate = (PlanLimit - UsedCalls) / 1_000_000
+        let mils_left = (self.get_plan_limit() as i64 - calls) / 1_000_000;
+        mils_left * amount_per_plan
+    }
 
     pub fn get_cost(&self) -> f64 {
         match self {

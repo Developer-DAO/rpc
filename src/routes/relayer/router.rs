@@ -2,7 +2,6 @@ use super::types::RelayErrors;
 use crate::routes::relayer::types::{PoktChains, Relayer};
 use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
 use serde_json::Value;
-
 use thiserror::Error;
 
 pub async fn route_call(
@@ -23,6 +22,8 @@ pub enum RouterErrors {
     DestinationError,
     #[error(transparent)]
     Relay(#[from] RelayErrors),
+    #[error("malformed payload")]
+    NotJsonRpc,
 }
 
 impl IntoResponse for RouterErrors {

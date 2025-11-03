@@ -1,6 +1,5 @@
-use crate::database::types::RELATIONAL_DATABASE;
+use crate::{database::types::RELATIONAL_DATABASE, routes::register::generate_verification_code};
 use axum::{Json, http::StatusCode, response::IntoResponse};
-use rand::{Rng, rngs::ThreadRng};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -38,7 +37,7 @@ pub async fn activate_account(
         Err(ActivationError::InvalidCode)?
     }
 
-    let new_code: u32 = ThreadRng::default().gen_range(10000000..99999999);
+    let new_code: String = generate_verification_code(8);
     sqlx::query!(
         "UPDATE Customers SET activated = true, verificationCode = $1 WHERE email = $2",
         new_code.to_string(),

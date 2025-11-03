@@ -1,15 +1,15 @@
 name: Build and Deploy dd-rpc to ECS
-
+# todo: staging environment
 on:
-  push:
-    branches:
-      - main
-      - dev
-      - ecs-cd
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [production]
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     defaults:
       run:
         working-directory: infra/opentofu/ecs

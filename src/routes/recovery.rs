@@ -1,4 +1,4 @@
-use crate::database::types::RELATIONAL_DATABASE;
+use crate::{database::types::RELATIONAL_DATABASE, routes::register::generate_verification_code};
 use argon2::{
     Argon2, PasswordHasher,
     password_hash::{SaltString, rand_core::OsRng},
@@ -10,7 +10,6 @@ use lettre::{
     message::{Mailbox, header::ContentType},
     transport::smtp::authentication::Credentials,
 };
-use rand::{Rng, rngs::ThreadRng};
 use serde::{Deserialize, Serialize};
 use std::num::ParseIntError;
 use thiserror::Error;
@@ -49,12 +48,14 @@ pub async fn recover_password_email(
     let server_mailbox: Mailbox =
         format!("Developer DAO RPC <{}>", server_email_info.address).parse()?;
 
-    let verification_code: u32 = ThreadRng::default().gen_range(10000000..99999999);
+    // We will end up allocating twice no matter what since tokio::spawn is bounded by a static lifetime
+    let verification_code = generate_verification_code(8);
+    let verification_code2 = verification_code.clone();
 
     let res1: tokio::task::JoinHandle<Result<(), RecoveryError>> = tokio::spawn(async move {
         sqlx::query!(
             "UPDATE Customers SET verificationCode = $1 WHERE email = $2",
-            verification_code.to_string(),
+            &verification_code,
             &email
         )
         .execute(db_connection)
@@ -68,7 +69,7 @@ pub async fn recover_password_email(
             .to(user_email)
             .subject("D_D RPC Password Reset Code")
             .header(ContentType::TEXT_PLAIN)
-            .body(format!("Your reset code is: {verification_code}"))?;
+            .body(format!("Your reset code is: {verification_code2}"))?;
 
         let mailer = SmtpTransport::starttls_relay("smtp.gmail.com")?
             .credentials(email_credentials)
@@ -127,7 +128,7 @@ pub async fn update_password(
             .to_string()
     };
 
-    let verification_code: u32 = ThreadRng::default().gen_range(10000000..99999999);
+    let verification_code = generate_verification_code(8);
     sqlx::query!(
         "UPDATE Customers SET verificationCode = $1, password = $3, activated = true WHERE email = $2",
         verification_code.to_string(),

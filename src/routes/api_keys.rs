@@ -6,6 +6,7 @@ use axum::{
     response::IntoResponse,
 };
 use jwt_simple::claims::JWTClaims;
+use rand::rngs::ThreadRng;
 use secp256k1::generate_keypair;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -15,9 +16,9 @@ pub struct KeygenLimit {
     count: Option<i64>,
 }
 
-#[tracing::instrument]
+#[axum::debug_handler]
 pub async fn generate_api_keys(
-    Extension(jwt): Extension<JWTClaims<Claims<'_>>>,
+    Extension(jwt): Extension<JWTClaims<Claims<'static>>>,
 ) -> Result<impl IntoResponse, ApiKeyError> {
     let keys = sqlx::query_as!(
         KeygenLimit,
@@ -33,8 +34,12 @@ pub async fn generate_api_keys(
         Err(ApiKeyError::RateLimit)?
     }
 
-    let (secret_key, _) = generate_keypair(&mut rand::thread_rng());
-    let key_string = hex::encode(secret_key.secret_bytes());
+    let key_string = {
+        let mut rand = ThreadRng::default();
+        let (secret_key, _) = generate_keypair(&mut rand);
+        hex::encode(secret_key.secret_bytes())
+    };
+
     sqlx::query!(
         "INSERT INTO Api (customerEmail, apiKey) VALUES ($1, $2)",
         jwt.custom.email.as_str(),

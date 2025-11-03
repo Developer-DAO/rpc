@@ -25,6 +25,9 @@ use axum::{Json, response::IntoResponse};
 use jwt_simple::claims::JWTClaims;
 use serde::{Deserialize, Serialize};
 use sqlx::types::time::OffsetDateTime;
+use sqlx::types::Uuid;
+#[cfg(test)]
+use std::collections::HashMap;
 use std::num::ParseFloatError;
 #[cfg(test)]
 use std::sync::OnceLock;
@@ -64,7 +67,7 @@ impl TokenDetails {
 }
 
 #[cfg(test)]
-static TEST_TOKEN: OnceLock<std::collections::HashMap<Address, TokenDetails>> = OnceLock::new();
+static TEST_TOKEN: OnceLock<HashMap<Address, TokenDetails>> = OnceLock::new();
 #[cfg(not(test))]
 #[cfg(not(feature = "dev"))]
 static TOKENS: std::sync::LazyLock<std::collections::HashMap<Address, TokenDetails>> =
@@ -124,13 +127,18 @@ pub struct EthereumPayment {
 }
 
 pub struct Balances {
-    balance: i64,
+    pub balance: i64,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct ApplyPayment {
-    plan: Plan,
-    duration: u8,
+pub struct Upgrade {
+    plan: Plan
+}
+
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Downgrade {
+    plan: Plan
 }
 
 #[derive(Deserialize)]
@@ -211,46 +219,140 @@ pub async fn get_payments<'a>(
     Ok((StatusCode::OK, serde_json::to_string(&res)?).into_response())
 }
 
-pub async fn apply_payment_to_plan(
+pub struct Cancel { 
+    pub id: Uuid,
+}
+
+/// cancels the renewal of a given plan for next billing cycle 
+pub async fn cancel(
     Extension(jwt): Extension<JWTClaims<Claims<'_>>>,
-    Json(payload): Json<ApplyPayment>,
 ) -> Result<impl IntoResponse, PaymentError> {
-    let info = sqlx::query_as!(
-        Balances,
-        "SELECT balance from Customers where email = $1",
+
+    let mut tx = RELATIONAL_DATABASE.get().unwrap().begin().await?;
+
+    sqlx::query!(
+        r#"
+        UPDATE RpcPlans
+        SET 
+        downgradeto = 'free'
+        WHERE 
+            $1 = email 
+        AND 
+            renew = true
+        "#,
         jwt.custom.email.as_str()
     )
-    .fetch_one(RELATIONAL_DATABASE.get().unwrap())
+        .execute(&mut *tx)
+        .await?;
+
+    tx.commit().await?;
+
+    Ok((StatusCode::OK, "Plan succesfully cancelled").into_response())
+}
+
+pub struct RpcPlan {
+    pub email: String,
+    pub calls: i64,
+    pub plan: Plan,
+    pub created: OffsetDateTime,
+    pub expires: OffsetDateTime,
+    pub renew: bool,
+    pub downgradeto: Option<Plan>
+}
+
+/// Downgrades the service tier for active plan next cycle
+pub async fn downgrade(
+    Extension(jwt): Extension<JWTClaims<Claims<'_>>>,
+    Json(payload): Json<Downgrade>,
+) -> Result<impl IntoResponse, PaymentError> {
+    let mut tx = RELATIONAL_DATABASE.get().unwrap().begin().await?;
+    // get user plans
+    let plan = sqlx::query_as!(RpcPlan, 
+        r#"SELECT email, calls, created, expires, plan as "plan!: Plan", renew, downgradeto as "downgradeto!: Plan" FROM RpcPlans 
+        WHERE $1 = email 
+        "#,  
+        jwt.custom.email.as_str(),
+    )
+        .fetch_one(&mut *tx)
+        .await?;
+
+    if payload.plan >= plan.plan || matches!(plan.plan, Plan::Free) {
+        return Ok((StatusCode::FORBIDDEN, "Not a downgrade").into_response())
+    }
+
+    // update tier for next cycle
+    sqlx::query!( 
+        r#"UPDATE RpcPlans set downgradeTo = $1 
+        WHERE $2 = email AND renew = true"#,  
+        payload.plan as Plan,
+        jwt.custom.email.as_str()
+    )
+    .execute(&mut *tx)
     .await?;
 
-    if info.balance <= 0 {
-        Err(PaymentError::ZeroBalance)?;
-    }
+    tx.commit().await?;
 
-    let plan_cost = payload.plan.get_cost();
-    let total_cost = plan_cost as i64 * payload.duration as i64;
+    Ok((StatusCode::OK, "Downgrade successful").into_response())
+}
 
-    if total_cost <= info.balance {
-        let mut tx = RELATIONAL_DATABASE.get().unwrap().begin().await?;
-        sqlx::query!(
-            "UPDATE Customers SET balance = balance - $1 WHERE Customers.email = $2",
-            total_cost,
-            jwt.custom.email.as_str()
-        )
-        .execute(&mut *tx)
+
+pub async fn upgrade(
+    Extension(jwt): Extension<JWTClaims<Claims<'_>>>,
+    Json(payload): Json<Upgrade>,
+) -> Result<impl IntoResponse, PaymentError> {
+    let mut tx = RELATIONAL_DATABASE.get().unwrap().begin().await?;
+    // get user plan
+    let plan = sqlx::query_as!(RpcPlan, 
+        r#"SELECT email, calls, created, expires, plan as "plan!: Plan", renew, downgradeto as "downgradeto!: Plan" FROM RpcPlans 
+        WHERE $1 = email 
+        "#,  
+        jwt.custom.email.as_str()
+    )
+        .fetch_one(&mut *tx)
         .await?;
 
-        sqlx::query!(
-            "UPDATE RpcPlans SET plan = $1 WHERE email = $2 ",
-            payload.plan as Plan,
-            jwt.custom.email.as_str()
-        )
-        .execute(&mut *tx)
-        .await?;
-        tx.commit().await?;
-    } else {
-        Err(PaymentError::InsufficientFunds)?
+    if payload.plan <= plan.plan {
+        return Ok((StatusCode::FORBIDDEN, "Not an upgrade").into_response())
     }
+
+    // cost of new plan - cost of old plan
+    let total_cost = (payload.plan.get_cost() - plan.plan.get_cost()) as i64  * 100;
+
+    // deduct balance from account
+    let mut tx = RELATIONAL_DATABASE.get().unwrap().begin().await?;
+    let r = sqlx::query!(
+        "UPDATE Customers SET balance = balance - $1 WHERE Customers.email = $2",
+        total_cost,
+        jwt.custom.email.as_str()
+    )
+    .execute(&mut *tx)
+    .await;
+
+    if let Err(e) = r {
+        match e.as_database_error() {
+            Some(db) => { 
+                // there is a check on user balances that asserts a non-zero balance, if this
+                // check fails then the DB will not allow the write
+                // allows for a fairly optimistic system & cuts out 1 round trip 
+                if db.is_check_violation() {
+                    return Ok((StatusCode::PAYMENT_REQUIRED, "Insufficient funds for plan").into_response());
+                }
+            },
+            None => Err(e)?,
+        }
+    }
+
+    // plan gets written to DB row
+    // calls is set to 0 because we prorated the total number of calls made by the user previously
+    sqlx::query!(
+        r#"UPDATE RpcPlans SET plan = $1, calls = 0, renew=TRUE, downgradeto=NULL WHERE email = $2"#,
+        payload.plan as Plan,
+        jwt.custom.email.as_str(),
+    )
+    .execute(&mut *tx)
+    .await?;
+
+    tx.commit().await?;
 
     Ok((StatusCode::OK, "Successfully applied payment").into_response())
 }
@@ -441,9 +543,7 @@ pub async fn process_ethereum_payment(
                 Asset::USDC => {}
             }
 
-            println!("Calculating credits from token ...");
-            let value = calculate_token_value(_token.asset, amount, _token.decimals).await?;
-            println!("Raw Value {value}");
+            let value = stablecoin_fixedpoint_conversion(amount, _token.decimals).await?;
 
             info!("USD amount paid: {value}");
 
@@ -482,20 +582,21 @@ pub async fn process_ethereum_payment(
 //     Ok(value)
 // }
 
-async fn calculate_token_value(
-    asset: Asset,
+async fn stablecoin_fixedpoint_conversion(
+//    asset: Asset,
     amount: U256,
     decimals: u8,
 ) -> Result<U256, PaymentError> {
-    let price: PriceData = reqwest::Client::new()
-        .get(format!(
-            "https://api.coinbase.com/v2/prices/{asset}-USD/spot"
-        ))
-        .send()
-        .await?
-        .json::<PriceData>()
-        .await?;
-    let usd_price_repr = parse_units(&price.data.amount, decimals)?.get_absolute();
+    // let price: PriceData = reqwest::Client::new()
+    //     .get(format!(
+    //         "https://api.coinbase.com/v2/prices/{asset}-USD/spot"
+    //     ))
+    //     .send()
+    //     .await?
+    //     .json::<PriceData>()
+    //     .await?;
+    let price = 1.00;
+    let usd_price_repr = parse_units(&price.to_string(), decimals)?.get_absolute();
     let value = (usd_price_repr * amount) / U256::from(10).pow(U256::from(decimals));
     Ok(value)
 }
@@ -555,7 +656,7 @@ pub enum PaymentError {
     UnitsError(#[from] UnitsError),
     #[error(
         "Failed to decode the transaction's calldata into ERC20::Transfer or ERC20::TransferFrom"
-    )]
+)]
     AbiDecodingError,
     #[error("No destination for tx")]
     NoDestination,
@@ -654,7 +755,7 @@ mod tests {
         let addy = *contract.address();
         println!("Contract address: {addy}");
         TEST_TOKEN.get_or_init(|| {
-            let mut map = std::collections::HashMap::new();
+            let mut map = HashMap::new();
             map.insert(addy, TokenDetails::new(18, Chain::Optimism, Asset::USDC));
             map
         });

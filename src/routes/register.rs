@@ -12,10 +12,10 @@ use lettre::{
     transport::smtp::{self, authentication::Credentials},
 };
 use rand::{Rng, rngs::ThreadRng};
-use thiserror::Error;
-// use time::OffsetDateTime;
 use siwe::generate_nonce;
+use thiserror::Error;
 use tokio::task::JoinError;
+use tracing::{error, info};
 
 pub struct Dedup {
     pub email: String,
@@ -35,6 +35,7 @@ pub async fn register_user(
     .await?;
 
     if exists.is_some() {
+        error!("User already registered");
         Err(RegisterUserError::AlreadyRegistered)?
     }
 
@@ -45,7 +46,9 @@ pub async fn register_user(
             .to_string()
     };
 
-    let verification_code: u32 = ThreadRng::default().gen_range(10000000..99999999);
+    let verification_code = generate_verification_code(8);
+
+    info!("Verification Code: {}", &verification_code);
 
     let server_email_info: &'static EmailLogin = SERVER_EMAIL.get().unwrap();
     let email_credentials = Credentials::new(
@@ -100,6 +103,19 @@ pub async fn register_user(
     Ok((StatusCode::OK, "User was successfully registered").into_response())
 }
 
+#[inline]
+pub fn generate_verification_code(size: usize) -> String {
+    ThreadRng::default()
+        .random_iter()
+        .take(size)
+        // 48-57 are the ASCII characters representing the digits 0..9
+        .map(|e: u8| (e % 10) + 48)
+        .fold(String::with_capacity(size), |mut acc, e| {
+            acc.push(e as char);
+            acc
+        })
+}
+
 #[derive(Error, Debug)]
 pub enum RegisterUserError {
     #[error("This user is already registered")]
@@ -133,26 +149,34 @@ impl From<argon2::password_hash::Error> for RegisterUserError {
 #[cfg(test)]
 pub mod test {
     use crate::{
-        Database, EmailLogin, JWTKey, TcpListener, database::types::RELATIONAL_DATABASE,
-        register_user, routes::types::RegisterUser,
+        Database, EmailLogin, JWTKey, TcpListener,
+        database::types::RELATIONAL_DATABASE,
+        register_user,
+        routes::{register::generate_verification_code, types::RegisterUser},
     };
     use argon2::{
         Argon2, PasswordHash, PasswordHasher, PasswordVerifier, password_hash::SaltString,
     };
     use axum::{Router, routing::post};
     use dotenvy::dotenv;
+    use jwt_simple::reexports::rand::SeedableRng;
     use lettre::{
         Message, Transport,
         message::{Mailbox, header::ContentType},
         transport::smtp::{self, authentication::Credentials},
     };
-    use rand::rngs::OsRng;
-    use rand::{Rng, rngs::ThreadRng};
+
+    #[test]
+    fn verification_code() {
+        assert!(generate_verification_code(8).parse::<u32>().is_ok());
+    }
 
     #[test]
     fn hash_test() {
         let hashed_pass: String = {
-            let salt = SaltString::generate(&mut OsRng);
+            let salt = SaltString::generate(
+                &mut jwt_simple::reexports::rand::rngs::StdRng::from_entropy(),
+            );
             Argon2::default()
                 .hash_password("testing_password".as_bytes(), &salt)
                 .unwrap()
@@ -182,7 +206,7 @@ pub mod test {
         });
 
         let res = reqwest::Client::new()
-            .post("http://localhost:3000/api/register")
+            .post("http://localhost:3111/api/register")
             .json(&RegisterUser {
                 email: to.to_string(),
                 password: "test".to_string(),
@@ -206,16 +230,13 @@ pub mod test {
             .execute(RELATIONAL_DATABASE.get().unwrap())
             .await
             .unwrap();
-
     }
-
-
 
     #[tokio::test]
     async fn mail() {
         dotenv().unwrap();
 
-        let verification_code: u32 = ThreadRng::default().gen_range(10000000..99999999);
+        let verification_code = generate_verification_code(8);
 
         let username = dotenvy::var("SMTP_USERNAME").unwrap();
         let password = dotenvy::var("SMTP_PASSWORD").unwrap();

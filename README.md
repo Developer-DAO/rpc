@@ -6,9 +6,9 @@ This server requires a few things set up in order to properly run it.
 
 Install Postgres: 
 
-MacOs: `brew install postgresql@16`
+MacOs: `brew install postgresql@18`
 
-Linux: `sudo apt-get -y install postgresql-16`
+Linux: `sudo apt-get -y install postgresql-18`
 
 Windows: Download the [installer](https://www.postgresql.org/download/windows/)
 
