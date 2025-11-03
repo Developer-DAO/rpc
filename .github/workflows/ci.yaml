@@ -56,7 +56,7 @@ jobs:
             - name: check
               run: cargo check --workspace ${{ matrix.flags }}
             - name: Anvil
-              run: curl -L https://foundry.paradigm.xyz | bash && foundryup
+              run: curl -L https://foundry.paradigm.xyz | bash && source /home/runner/.bashrc && foundryup
             - name: test
               env: 
                   DATABASE_URL: postgres://crypdough:testing@localhost:5432/ddrpc
