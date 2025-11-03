@@ -47,12 +47,6 @@ jobs:
             - uses: Swatinem/rust-cache@v2
               with:
                   cache-on-failure: true
-              env: 
-                  DATABASE_URL: postgres://crypdough:testing@localhost:5432/ddrpc
-                  ETHEREUM_ENDPOINT: ${{ secrets.ETHEREUM_ENDPOINT }}
-                  SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
-                  SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
-                  JWT_KEY: ${{ secrets.JWT_KEY }}
             - name: install sqlx-cli
               run: cargo install sqlx-cli
             - name: create db
@@ -62,6 +56,12 @@ jobs:
             - name: check
               run: cargo check --workspace ${{ matrix.flags }}
             - name: test
+              env: 
+                  DATABASE_URL: postgres://crypdough:testing@localhost:5432/ddrpc
+                  ETHEREUM_ENDPOINT: ${{ secrets.ETHEREUM_ENDPOINT }}
+                  SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+                  SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+                  JWT_KEY: ${{ secrets.JWT_KEY }}
               run: cargo test --workspace ${{ matrix.flags }}
 
     clippy:
