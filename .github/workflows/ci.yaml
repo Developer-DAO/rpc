@@ -47,7 +47,6 @@ jobs:
             - uses: Swatinem/rust-cache@v2
               with:
                   cache-on-failure: true
-            - name: env
               env: 
                   DATABASE_URL: postgres://crypdough:testing@localhost:5432/ddrpc
                   ETHEREUM_ENDPOINT: ${{ secrets.ETHEREUM_ENDPOINT }}
