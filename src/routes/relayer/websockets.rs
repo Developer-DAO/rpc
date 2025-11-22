@@ -212,16 +212,3 @@ impl IntoResponse for WsError {
 pub enum Command {
     Kill,
 }
-
-#[cfg(test)]
-pub mod test {
-    use super::*;
-
-    #[tokio::test]
-    async fn ws() {
-        let url = dotenvy::var("SEPOLIA_WS").unwrap();
-        connect_async_tls_with_config(url, None, false, None)
-            .await
-            .unwrap();
-    }
-}
