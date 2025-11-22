@@ -29,7 +29,7 @@ use routes::login::{refresh, user_login_siwe};
 use routes::payment::{get_calls_and_balance, get_payments, process_ethereum_payment};
 use routes::siwe::{get_siwe_nonce, jwt_get_siwe_nonce, siwe_add_wallet};
 use tokio::net::TcpListener;
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::CorsLayer;
 use tracing::info;
 use tracing_subscriber::fmt::format::FmtSpan;
 
@@ -60,16 +60,10 @@ async fn main() {
         .allow_methods([Method::GET, Method::POST, Method::DELETE])
         .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION, header::COOKIE]);
 
-    let cors_rpc = CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods([Method::POST])
-        .allow_headers([header::CONTENT_TYPE]);
-
     let relayer = Router::new()
         .route("/rpc/{chain}/{api_key}", post(route_call))
         .route("/ws/{chain}/{api_key}", axum::routing::any(ws_handler))
-        .route_layer(from_fn(validate_subscription_and_update_user_calls))
-        .layer(cors_rpc);
+        .route_layer(from_fn(validate_subscription_and_update_user_calls));
 
     let api_keys = Router::new()
         .route("/api/keys", get(get_all_api_keys).post(generate_api_keys))

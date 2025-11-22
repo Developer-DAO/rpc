@@ -6,18 +6,18 @@ use axum::response::IntoResponse;
 use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::{SinkExt, StreamExt};
 use http::StatusCode;
-use http::header::{CONNECTION, HOST, SEC_WEBSOCKET_KEY, SEC_WEBSOCKET_VERSION, UPGRADE};
-use openssl::base64;
+// use http::header::{CONNECTION, HOST, SEC_WEBSOCKET_KEY, SEC_WEBSOCKET_VERSION, UPGRADE};
+// use openssl::base64;
 use rand::{RngCore, SeedableRng, rngs::StdRng};
 use thiserror::Error;
 use tokio::{
     select,
-    sync::mpsc::{self, Receiver, Sender},
+    sync::mpsc,
 };
 use tokio_tungstenite::{
     connect_async_tls_with_config, tungstenite::Message as TungsteniteMessage,
 };
-use tracing::info;
+use tracing::{info, warn};
 
 pub async fn ws_handler(
     ws: WebSocketUpgrade,
@@ -37,8 +37,14 @@ pub async fn ws_handler(
             // handle error case
             return;
         };
-        let (shutdown_tx, shutdown_rx) = mpsc::channel(0);
-        let (cleanup_tx, cleanup_rx): (Sender<Command>, Receiver<Command>) = mpsc::channel(0);
+        let (shutdown_tx, shutdown_rx): (
+            mpsc::UnboundedSender<Command>,
+            mpsc::UnboundedReceiver<Command>,
+        ) = mpsc::unbounded_channel();
+        let (cleanup_tx, cleanup_rx): (
+            mpsc::UnboundedSender<Command>,
+            mpsc::UnboundedReceiver<Command>,
+        ) = mpsc::unbounded_channel();
         handle_user_msgs(cleanup_rx, user_rv, shutdown_tx).await;
         handle_ws_conn(path, shutdown_rx, cleanup_tx, sub_info, user_tx).await;
     });
@@ -46,9 +52,9 @@ pub async fn ws_handler(
 }
 
 pub async fn handle_user_msgs(
-    mut cleanup_rx: mpsc::Receiver<Command>,
+    mut cleanup_rx: mpsc::UnboundedReceiver<Command>,
     mut user_rv: SplitStream<WebSocket>,
-    shutdown_tx: mpsc::Sender<Command>,
+    shutdown_tx: mpsc::UnboundedSender<Command>,
 ) {
     tokio::spawn(async move {
         // max wait time?
@@ -57,27 +63,22 @@ pub async fn handle_user_msgs(
                 Some(Command::Kill) = cleanup_rx.recv() => {
                     break;
                 },
-                Some(Ok(msg)) = user_rv.next() => {
-                    match msg {
-                        Message::Text(_utf8_bytes) => todo!(),
-                        Message::Binary(_bytes) => todo!(),
-                        Message::Ping(_bytes) => todo!(),
-                        Message::Pong(_bytes) => todo!(),
-                        Message::Close(_close_frame) => {
-                            shutdown_tx.send(Command::Kill).await.unwrap();
-                            break
-                        },
-                    }
+                Some(Ok(Message::Close(_close_frame))) = user_rv.next() => {
+                    shutdown_tx.send(Command::Kill).unwrap();
+                    break
                 }
             }
         }
+
+        warn!("Exiting user msg handler");
     });
 }
 
+#[tracing::instrument]
 pub async fn handle_ws_conn(
     path: PoktChains,
-    mut shutdown_rx: mpsc::Receiver<Command>,
-    cleanup_tx: mpsc::Sender<Command>,
+    mut shutdown_rx: mpsc::UnboundedReceiver<Command>,
+    cleanup_tx: mpsc::UnboundedSender<Command>,
     sub_info: Utf8Bytes,
     mut user_tx: SplitSink<WebSocket, Message>,
 ) {
@@ -85,29 +86,32 @@ pub async fn handle_ws_conn(
         let mut reconnect_count: u8 = 0;
         'reconnect: loop {
             if reconnect_count >= 3 {
-                cleanup_tx.send(Command::Kill).await.unwrap();
+                cleanup_tx.send(Command::Kill).unwrap();
                 break 'reconnect;
             }
             let mut buf = [0u8; 16];
             let mut rng: StdRng = StdRng::from_rng(&mut rand::rng());
             rng.fill_bytes(&mut buf);
-            let sec_websocket_key = base64::encode_block(&buf);
-            let (node_socket, _res) = if cfg!(test) {
-                let request = http::Request::builder()
-                    .uri("localhost:3070/v1")
-                    .header("Target-Service-Id", path)
-                    .header(SEC_WEBSOCKET_KEY, &sec_websocket_key)
-                    .header(HOST, "localhost:3070")
-                    .header(UPGRADE, "websocket")
-                    .header(CONNECTION, "upgrade")
-                    .header(SEC_WEBSOCKET_VERSION, 13)
-                    .body(())
-                    .unwrap();
-                connect_async_tls_with_config(request, None, false, None)
-                    .await
-                    .unwrap()
-            } else {
-                let url = dotenvy::var("SEPOLIA_PROVIDER").unwrap();
+//            let sec_websocket_key = base64::encode_block(&buf);
+            //  = if cfg!(test) {
+            //     let request = http::Request::builder()
+            //         .uri("localhost:3070/v1")
+            //         .header("Target-Service-Id", path)
+            //         .header(SEC_WEBSOCKET_KEY, &sec_websocket_key)
+            //         .header(HOST, "localhost:3070")
+            //         .header(UPGRADE, "websocket")
+            //         .header(CONNECTION, "upgrade")
+            //         .header(SEC_WEBSOCKET_VERSION, 13)
+            //         .body(())
+            //         .unwrap();
+            //     connect_async_tls_with_config(request, None, false, None)
+            //         .await
+            //         .unwrap()
+            // } else {
+            // };
+
+            let (node_socket, _res) = {
+                let url = dotenvy::var("SEPOLIA_WS").unwrap();
                 connect_async_tls_with_config(url, None, false, None)
                     .await
                     .unwrap()
@@ -136,22 +140,24 @@ pub async fn handle_ws_conn(
                                     if let Err(_e) = user_tx.send(m).await {
                                         // User WS is disconnected
                                         node_tx.send(TungsteniteMessage::Close(None)).await.unwrap();
-                                        cleanup_tx.send(Command::Kill).await.unwrap();
+                                        cleanup_tx.send(Command::Kill).unwrap();
+                                        warn!("Failed to relay msg to user from node");
                                         break 'reconnect;
                                     }
                                 }
                                 Message::Close(_close_frame) => {
-
                                     // log node info and close frame leading to ws closure
                                     // handle close of Node's WS connection
                                     let ping = axum::extract::ws::Message::Ping(Bytes::new());
                                     if let Err(_e) = user_tx.send(ping).await {
                                         // do not reestablish connection and kill loop
                                         // log user info and conditions leading to ws closure
-                                        cleanup_tx.send(Command::Kill).await.unwrap();
+                                        cleanup_tx.send(Command::Kill).unwrap();
+                                        warn!("Closing user ws connection...");
                                         break 'reconnect;
                                     }
                                     reconnect_count += 1;
+                                    warn!("Reconnecting ...");
                                     break 'ws_bridge;
                                 }
                                 _ => {}
@@ -161,6 +167,7 @@ pub async fn handle_ws_conn(
                 }
             }
         }
+        warn!("Exiting connection bridge");
     });
 }
 
@@ -204,4 +211,17 @@ impl IntoResponse for WsError {
 
 pub enum Command {
     Kill,
+}
+
+#[cfg(test)]
+pub mod test {
+    use super::*;
+
+    #[tokio::test]
+    async fn ws() {
+        let url = dotenvy::var("SEPOLIA_WS").unwrap();
+        connect_async_tls_with_config(url, None, false, None)
+            .await
+            .unwrap();
+    }
 }

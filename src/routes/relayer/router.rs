@@ -1,7 +1,63 @@
+use std::{
+    collections::HashMap,
+    sync::{
+        Arc, RwLock,
+        atomic::{AtomicU64, Ordering},
+    },
+};
+
 use super::types::RelayErrors;
 use crate::routes::relayer::types::{PoktChains, Relayer};
 use axum::{body::Bytes, extract::Path, http::StatusCode, response::IntoResponse};
 use thiserror::Error;
+
+pub struct Cache {
+    // api_key => calls
+    pub entries: Arc<RwLock<HashMap<String, Arc<AtomicU64>>>>,
+}
+
+/// REMEMBER: DON'T HOLD THE LOCK FOR LONGER THAN NECESSARY
+impl Cache {
+    pub fn new() -> Cache {
+        Cache {
+            entries: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+
+    /// returns old value before incrementing or inserting
+    pub fn fetch_incr_or_insert(&self, key: String) -> u64 {
+        match self.count_ref(&key) {
+            Some(e) => e.fetch_add(1, Ordering::Acquire),
+            None => self.insert(key),
+        }
+    }
+
+    pub fn insert(&self, key: String) -> u64 {
+        let mut hm = self.entries.write().unwrap();
+        // catch all in case multiple requests are in flight and cache isn't populated
+        match hm.get_mut(&key) {
+            Some(e) => e.fetch_add(1, Ordering::Acquire),
+            None => {
+                hm.insert(key, Arc::new(AtomicU64::new(1)));
+                1
+            }
+        }
+    }
+
+    /// CRITICAL: THIS DOES NOT CONTEND RW LOCK AS WRITER
+    pub fn count_ref(&self, key: &str) -> Option<Arc<AtomicU64>> {
+        // operate on a value without holding onto the lock
+        // drops at the end of the scope
+        let hm = self.entries.read().unwrap();
+        let key = hm.get(key);
+        key.cloned()
+    }
+
+    pub fn refresh_entire_cache(&self, new_hm: HashMap<String, Arc<AtomicU64>>) {
+        let mut lock = self.entries.write().unwrap();
+        *lock = new_hm;
+    }
+}
 
 pub async fn route_call(
     Path(route_info): Path<[String; 2]>,

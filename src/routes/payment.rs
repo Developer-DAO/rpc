@@ -223,7 +223,7 @@ pub struct Cancel {
     pub id: Uuid,
 }
 
-/// cancels the renewal of a given plan for next billing cycle 
+/// cancels a user's subscription
 pub async fn cancel(
     Extension(jwt): Extension<JWTClaims<Claims<'_>>>,
 ) -> Result<impl IntoResponse, PaymentError> {
