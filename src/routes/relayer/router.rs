@@ -16,6 +16,12 @@ pub struct Cache {
     pub entries: Arc<RwLock<HashMap<String, Arc<AtomicU64>>>>,
 }
 
+impl Default for Cache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// REMEMBER: DON'T HOLD THE LOCK FOR LONGER THAN NECESSARY
 impl Cache {
     pub fn new() -> Cache {

@@ -10,10 +10,7 @@ use http::StatusCode;
 // use openssl::base64;
 use rand::{RngCore, SeedableRng, rngs::StdRng};
 use thiserror::Error;
-use tokio::{
-    select,
-    sync::mpsc,
-};
+use tokio::{select, sync::mpsc};
 use tokio_tungstenite::{
     connect_async_tls_with_config, tungstenite::Message as TungsteniteMessage,
 };
@@ -58,15 +55,11 @@ pub async fn handle_user_msgs(
 ) {
     tokio::spawn(async move {
         // max wait time?
-        loop {
-            select! {
-                Some(Command::Kill) = cleanup_rx.recv() => {
-                    break;
-                },
-                Some(Ok(Message::Close(_close_frame))) = user_rv.next() => {
-                    shutdown_tx.send(Command::Kill).unwrap();
-                    break
-                }
+        select! {
+            Some(Command::Kill) = cleanup_rx.recv() => {
+            },
+            Some(Ok(Message::Close(_close_frame))) = user_rv.next() => {
+                shutdown_tx.send(Command::Kill).unwrap();
             }
         }
 
@@ -92,7 +85,7 @@ pub async fn handle_ws_conn(
             let mut buf = [0u8; 16];
             let mut rng: StdRng = StdRng::from_rng(&mut rand::rng());
             rng.fill_bytes(&mut buf);
-//            let sec_websocket_key = base64::encode_block(&buf);
+            //            let sec_websocket_key = base64::encode_block(&buf);
             //  = if cfg!(test) {
             //     let request = http::Request::builder()
             //         .uri("localhost:3070/v1")
