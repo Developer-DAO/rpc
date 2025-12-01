@@ -32,8 +32,6 @@ module "ecs" {
     }
   }
 
-  # Capacity provider - autoscaling groups
-  default_capacity_provider_use_fargate = false
   autoscaling_capacity_providers = {
     # On-demand instances
     rpc_ec2 = {
