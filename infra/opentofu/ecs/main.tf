@@ -4,7 +4,7 @@ data "terraform_remote_state" "vpc" {
   backend = "s3"
   config = {
       bucket = "dd-cloud-terraform-state"
-      key    = "ecs/terraform.tfstate"
+      key    = "vpc/terraform.tfstate"
       region = "us-east-2"
   }
 }
@@ -20,6 +20,7 @@ data "aws_ami" "ecs_ami" {
 
 module "ecs" {
   source = "terraform-aws-modules/ecs/aws"
+  version = "5.12.1"
 
   cluster_name = "rpc-ecs-cluster"
 
@@ -32,6 +33,8 @@ module "ecs" {
     }
   }
 
+  # Capacity provider - autoscaling groups
+  default_capacity_provider_use_fargate = false
   autoscaling_capacity_providers = {
     # On-demand instances
     rpc_ec2 = {
