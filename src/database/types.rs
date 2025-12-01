@@ -101,7 +101,6 @@ impl Display for Plan {
     }
 }
 
-
 impl Plan {
     pub const FREE_TIER_LIMIT: u32 = 1_000_000;
     // Free Tier: 1M requests per month

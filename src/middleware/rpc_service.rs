@@ -19,13 +19,6 @@ pub struct Credits<'a> {
     expires: OffsetDateTime,
 }
 
-pub struct SubscriptionInfo<'a> {
-    email: EmailAddress<'a>,
-    plan: Plan,
-    expires: OffsetDateTime,
-    balance: i64,
-}
-
 #[tracing::instrument(skip(request))]
 pub async fn validate_subscription_and_update_user_calls(
     Path(key): Path<[String; 2]>,
@@ -89,60 +82,81 @@ pub async fn subsciption_task() -> Result<(), RpcAuthErrors> {
     }
 }
 
+pub struct RenewInfo<'a> {
+    email: EmailAddress<'a>,
+    plan: Plan,
+    expires: OffsetDateTime,
+    balance: i64,
+    downgradeto: Option<Plan>,
+}
+
 pub async fn refill_calls_and_renew_plans() -> Result<(), RpcAuthErrors> {
     // Reset calls. If someone's plan is expired, attempt to renew the current plan
     // from the account balance. If the account does not have enough balance,
     // then switch to the free plan and reset calls.
 
-    let user_info = sqlx::query_as!(
-        SubscriptionInfo,
-        r#"
-        SELECT balance, Customers.email, plan as "plan!: Plan", expires FROM RpcPlans, Customers where now() > expires
-        "#
-    )
-    .fetch_all(RELATIONAL_DATABASE.get().unwrap())
-    .await?;
-
-    sqlx::query!("UPDATE RpcPlans SET calls = 0 WHERE now() >= expires AND calls > 0",)
-        .execute(RELATIONAL_DATABASE.get().unwrap())
+    let mut tx = RELATIONAL_DATABASE
+        .get()
+        .expect("We're cooked chat (no DB connection)")
+        .begin()
         .await?;
 
-    // sqlx::query!(r#"
-    //     SELECT balance, Customers.email, plan as "plan!:Plan"
-    //     FROM Customers, RpcPlans
-    //
-    //     "#);
+    let user_info = sqlx::query_as!(
+        RenewInfo,
+        r#"
+        SELECT balance, Customers.email, plan as "plan!: Plan", expires, downgradeto as "downgradeto!: Plan" FROM RpcPlans, Customers where now() >= expires
+        "#
+    )
+    .fetch_all(&mut *tx)
+    .await?;
+
+    // reset user calls
+    sqlx::query!("UPDATE RpcPlans SET calls = 0 WHERE now() >= expires AND calls > 0",)
+        .execute(&mut *tx)
+        .await?;
 
     for user_info in user_info {
-        tokio::spawn(async move {
-            if matches!(user_info.plan, Plan::Tier1 | Plan::Tier2 | Plan::Tier3)
-                && user_info.expires > OffsetDateTime::now_utc()
-            {
-                let cost = (user_info.plan.get_cost() * 100.0) as i64;
+        // handles downgrade or cancellation
+        if let Some(dplan) = user_info.downgradeto
+            && user_info.plan > dplan
+        {
+            sqlx::query!(
+                "UPDATE RpcPlans SET plan = $1 where email = $2",
+                dplan as Plan,
+                user_info.email.as_str(),
+            )
+            .execute(&mut *tx)
+            .await?;
+        };
 
-                if user_info.balance >= cost {
-                    sqlx::query!(
-                        "UPDATE Customers SET balance = balance - $1 where email = $2",
-                        cost,
-                        user_info.email.as_str(),
-                    )
-                    .execute(RELATIONAL_DATABASE.get().unwrap())
-                    .await?;
-                } else {
-                    sqlx::query!(
-                        "UPDATE RpcPlans SET plan = $1 where email = $2",
-                        Plan::Free as Plan,
-                        user_info.email.as_str(),
-                    )
-                    .execute(RELATIONAL_DATABASE.get().unwrap())
-                    .await?;
-                }
+        if matches!(user_info.plan, Plan::Tier1 | Plan::Tier2 | Plan::Tier3)
+            && user_info.expires >= OffsetDateTime::now_utc()
+        {
+            let cost = (user_info.plan.get_cost() * 100.0) as i64;
+
+            if user_info.balance >= cost {
+                sqlx::query!(
+                    "UPDATE Customers SET balance = balance - $1 where email = $2",
+                    cost,
+                    user_info.email.as_str(),
+                )
+                .execute(&mut *tx)
+                .await?;
+            } else {
+                // insufficient balance to cover plan
+                // downgrades to Free
+                sqlx::query!(
+                    "UPDATE RpcPlans SET plan = $1 where email = $2",
+                    Plan::Free as Plan,
+                    user_info.email.as_str(),
+                )
+                .execute(&mut *tx)
+                .await?;
             }
-            Ok::<(), RpcAuthErrors>(())
-        })
-        .await
-        .unwrap()?;
+        }
     }
+
+    tx.commit().await?;
 
     Ok(())
 }

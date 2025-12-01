@@ -237,8 +237,6 @@ pub async fn cancel(
         downgradeto = 'free'
         WHERE 
             $1 = email 
-        AND 
-            renew = true
         "#,
         jwt.custom.email.as_str()
     )
@@ -256,7 +254,6 @@ pub struct RpcPlan {
     pub plan: Plan,
     pub created: OffsetDateTime,
     pub expires: OffsetDateTime,
-    pub renew: bool,
     pub downgradeto: Option<Plan>
 }
 
@@ -268,7 +265,7 @@ pub async fn downgrade(
     let mut tx = RELATIONAL_DATABASE.get().unwrap().begin().await?;
     // get user plans
     let plan = sqlx::query_as!(RpcPlan, 
-        r#"SELECT email, calls, created, expires, plan as "plan!: Plan", renew, downgradeto as "downgradeto!: Plan" FROM RpcPlans 
+        r#"SELECT email, calls, created, expires, plan as "plan!: Plan", downgradeto as "downgradeto!: Plan" FROM RpcPlans 
         WHERE $1 = email 
         "#,  
         jwt.custom.email.as_str(),
@@ -283,7 +280,7 @@ pub async fn downgrade(
     // update tier for next cycle
     sqlx::query!( 
         r#"UPDATE RpcPlans set downgradeTo = $1 
-        WHERE $2 = email AND renew = true"#,  
+        WHERE $2 = email"#,  
         payload.plan as Plan,
         jwt.custom.email.as_str()
     )
@@ -303,7 +300,7 @@ pub async fn upgrade(
     let mut tx = RELATIONAL_DATABASE.get().unwrap().begin().await?;
     // get user plan
     let plan = sqlx::query_as!(RpcPlan, 
-        r#"SELECT email, calls, created, expires, plan as "plan!: Plan", renew, downgradeto as "downgradeto!: Plan" FROM RpcPlans 
+        r#"SELECT email, calls, created, expires, plan as "plan!: Plan", downgradeto as "downgradeto!: Plan" FROM RpcPlans 
         WHERE $1 = email 
         "#,  
         jwt.custom.email.as_str()
@@ -345,7 +342,7 @@ pub async fn upgrade(
     // plan gets written to DB row
     // calls is set to 0 because we prorated the total number of calls made by the user previously
     sqlx::query!(
-        r#"UPDATE RpcPlans SET plan = $1, calls = 0, renew=TRUE, downgradeto=NULL WHERE email = $2"#,
+        r#"UPDATE RpcPlans SET plan = $1, calls = 0, downgradeto=NULL WHERE email = $2"#,
         payload.plan as Plan,
         jwt.custom.email.as_str(),
     )

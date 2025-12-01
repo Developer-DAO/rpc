@@ -3,8 +3,8 @@
 data "terraform_remote_state" "vpc" {
   backend = "s3"
   config = {
-      bucket = "dd-test-rpc-terraform-state"
-      key    = "vpc/terraform.tfstate"
+      bucket = "dd-cloud-terraform-state"
+      key    = "ecs/terraform.tfstate"
       region = "us-east-2"
   }
 }
@@ -56,14 +56,14 @@ module "ecs" {
 
   services = {
     dd-rpc = {
-      cpu    = 1024
-      memory = 4096
+      cpu    = 4096
+      memory = 8192
 
       # Container definition(s)
       container_definitions = {
         grove-path = {
-          cpu                = 512
-          memory             = 1024
+          cpu                = 2048
+          memory             = 4096
           essential          = true
           image              = "ghcr.io/buildwithgrove/path:main"
           memory_reservation = 50
@@ -81,11 +81,17 @@ module "ecs" {
             retries      = 3
             start_period = 10
           }
+          secrets = [
+            {
+              name      = "GATEWAY_CONFIG"
+              valueFrom = "arn:aws:secretsmanager:us-east-2:975950814568:secret:dd-cloud-nyylCQ:GATEWAY_CONFIG:AWSCURRENT" # or something like module.secret.secret_arn
+            }
+          ]
         }
 
         rpc = {
-          cpu       = 512
-          memory    = 1024
+          cpu       = 2048
+          memory    = 4096
           essential = true
           image     = var.rpc_image
           port_mappings = [
@@ -101,6 +107,36 @@ module "ecs" {
             condition     = "HEALTHY"
           }]
           memory_reservation = 100
+          secrets = [
+            {
+              name      = "SMTP_USERNAME"
+              valueFrom = "arn:aws:secretsmanager:us-east-2:975950814568:secret:dd-cloud-nyylCQ:SMTP_USERNAME:AWSCURRENT" # or something like module.secret.secret_arn
+            },
+            {
+              name      = "SMTP_PASSWORD"
+              valueFrom = "arn:aws:secretsmanager:us-east-2:975950814568:secret:dd-cloud-nyylCQ:SMTP_PASSWORD:AWSCURRENT" # or something like module.secret.secret_arn
+            },
+            {
+              name      = "JWT_KEY"
+              valueFrom = "arn:aws:secretsmanager:us-east-2:975950814568:secret:dd-cloud-nyylCQ:JWT_KEY:AWSCURRENT" # or something like module.secret.secret_arn
+            },
+            {
+              name      = "DATABASE_URL"
+              valueFrom = "arn:aws:secretsmanager:us-east-2:975950814568:secret:dd-cloud-nyylCQ:DATABASE_URL:AWSCURRENT" 
+            },
+            {
+              name      = "SEPOLIA_ENDPOINT"
+              valueFrom = "arn:aws:secretsmanager:us-east-2:975950814568:secret:dd-cloud-nyylCQ:SEPOLIA_ENDPOINT:AWSCURRENT"
+            },
+            {
+              name      = "ETHEREUM_ENDPOINT"
+              valueFrom = "arn:aws:secretsmanager:us-east-2:975950814568:secret:dd-cloud-nyylCQ:ETHEREUM_ENDPOINT:AWSCURRENT"
+            },
+            {
+              name      = "SEPOLIA_WS"
+              valueFrom = "arn:aws:secretsmanager:us-east-2:975950814568:secret:dd-cloud-nyylCQ:SEPOLIA_WS:AWSCURRENT"
+            }
+          ]
         }
       }
 
@@ -229,6 +265,7 @@ module "autoscaling" {
         ECS_LOGLEVEL=debug
         ECS_CONTAINER_INSTANCE_TAGS=${jsonencode(local.tags)}
         ECS_ENABLE_TASK_IAM_ROLE=true
+        echo $GATEWAY_CONFIG > ./local/path/.config.yaml
         EOF
       EOT
     }

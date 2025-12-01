@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT email, calls, created, expires, plan as \"plan!: Plan\", renew, downgradeto as \"downgradeto!: Plan\" FROM RpcPlans \n        WHERE $1 = email \n        ",
+  "query": "SELECT email, calls, created, expires, plan as \"plan!: Plan\", downgradeto as \"downgradeto!: Plan\" FROM RpcPlans \n        WHERE $1 = email \n        ",
   "describe": {
     "columns": [
       {
@@ -42,11 +42,6 @@
       },
       {
         "ordinal": 5,
-        "name": "renew",
-        "type_info": "Bool"
-      },
-      {
-        "ordinal": 6,
         "name": "downgradeto!: Plan",
         "type_info": {
           "Custom": {
@@ -74,9 +69,8 @@
       false,
       false,
       false,
-      false,
       true
     ]
   },
-  "hash": "fde037267ee0afd7821d62ac581f66cc5ae5795a46567d40b4c699703ec0bef3"
+  "hash": "24d593418a12debd758437bbc68a3ac23e807a99264fc53dde1953f7c74975d9"
 }

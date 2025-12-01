@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "UPDATE RpcPlans set downgradeTo = $1 \n        WHERE $2 = email AND renew = true",
+  "query": "UPDATE RpcPlans set downgradeTo = $1 \n        WHERE $2 = email",
   "describe": {
     "columns": [],
     "parameters": {
@@ -23,5 +23,5 @@
     },
     "nullable": []
   },
-  "hash": "afd4d9bcc694dcc52c7e98531efde04b2eaee730410e54dd263c4caa70a3c8bc"
+  "hash": "aa507473cc37d7c0abd930f202f3246f26389501d22f2a21f9dc0a08f6525c1a"
 }

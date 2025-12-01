@@ -21,7 +21,6 @@ CREATE TABLE IF NOT EXISTS RpcPlans (
     plan PLAN NOT NULL DEFAULT 'free',
     created TIMESTAMPTZ GENERATED ALWAYS AS(('now'::timestamptz AT TIME ZONE 'UTC')) STORED NOT NULL,
     expires TIMESTAMPTZ GENERATED ALWAYS AS(('now'::timestamptz AT TIME ZONE 'UTC') + INTERVAL '1 months') STORED NOT NULL,
-    renew bool NOT NULL DEFAULT TRUE,
     downgradeTo PLAN
 );
 

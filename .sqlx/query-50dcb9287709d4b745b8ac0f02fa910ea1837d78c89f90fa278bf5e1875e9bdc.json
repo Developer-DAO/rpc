@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT balance, Customers.email, plan as \"plan!: Plan\", expires FROM RpcPlans, Customers where now() > expires\n        ",
+  "query": "\n        SELECT balance, Customers.email, plan as \"plan!: Plan\", expires, downgradeto as \"downgradeto!: Plan\" FROM RpcPlans, Customers where now() >= expires\n        ",
   "describe": {
     "columns": [
       {
@@ -34,6 +34,23 @@
         "ordinal": 3,
         "name": "expires",
         "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 4,
+        "name": "downgradeto!: Plan",
+        "type_info": {
+          "Custom": {
+            "name": "plan",
+            "kind": {
+              "Enum": [
+                "free",
+                "tier1",
+                "tier2",
+                "tier3"
+              ]
+            }
+          }
+        }
       }
     ],
     "parameters": {
@@ -43,8 +60,9 @@
       false,
       false,
       false,
-      false
+      false,
+      true
     ]
   },
-  "hash": "a894b9ae427c94e2db9095cc5b7c36dc8895cc4bb3c4dbc62cf2494760321174"
+  "hash": "50dcb9287709d4b745b8ac0f02fa910ea1837d78c89f90fa278bf5e1875e9bdc"
 }

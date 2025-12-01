@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE RpcPlans\n        SET \n        downgradeto = 'free'\n        WHERE \n            $1 = email \n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8d9321f684ee4045341058f44d7ef6329ebccae183bb060736288624c4197382"
+}
