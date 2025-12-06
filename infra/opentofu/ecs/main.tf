@@ -62,15 +62,15 @@ module "ecs" {
 
       # Container definition(s)
       container_definitions = {
-        grove-path = {
+        path = {
           cpu                = 2048
           memory             = 4096
           essential          = true
-          image              = "ghcr.io/buildwithgrove/path:main"
+          image              = "ghcr.io/pokt-network/path:main"
           memory_reservation = 50
           port_mappings = [
             {
-              name          = "grove-path"
+              name          = "path"
               containerPort = 3069
               protocol      = "tcp"
             }
@@ -85,7 +85,7 @@ module "ecs" {
           secrets = [
             {
               name      = "GATEWAY_CONFIG"
-              valueFrom = "arn:aws:secretsmanager:us-east-2:975950814568:secret:dd-cloud-nyylCQ:GATEWAY_CONFIG:AWSCURRENT" # or something like module.secret.secret_arn
+              valueFrom = "arn:aws:secretsmanager:us-east-2:975950814568:secret:GatewayConfig-hQSJJs"
             }
           ]
         }
@@ -95,6 +95,11 @@ module "ecs" {
           memory    = 4096
           essential = true
           image     = var.rpc_image
+
+          repository_credentials = {
+            credentialsParameter = "arn:aws:secretsmanager:us-east-2:975950814568:secret:GhcrCredentials-j8eElR"
+          }
+
           port_mappings = [
             {
               name          = "dd-rpc"
@@ -104,39 +109,40 @@ module "ecs" {
           ]
 
           dependencies = [{
-            containerName = "grove-path"
+            containerName = "path"
             condition     = "HEALTHY"
           }]
           memory_reservation = 100
           secrets = [
             {
               name      = "SMTP_USERNAME"
-              valueFrom = "arn:aws:secretsmanager:us-east-2:975950814568:secret:dd-cloud-nyylCQ:SMTP_USERNAME:AWSCURRENT" # or something like module.secret.secret_arn
+              valueFrom = "arn:aws:secretsmanager:us-east-2:975950814568:secret:dd-cloud-nyylCQ:SMTP_USERNAME::" 
             },
             {
               name      = "SMTP_PASSWORD"
-              valueFrom = "arn:aws:secretsmanager:us-east-2:975950814568:secret:dd-cloud-nyylCQ:SMTP_PASSWORD:AWSCURRENT" # or something like module.secret.secret_arn
+              valueFrom = "arn:aws:secretsmanager:us-east-2:975950814568:secret:dd-cloud-nyylCQ:SMTP_PASSWORD::"
             },
             {
               name      = "JWT_KEY"
-              valueFrom = "arn:aws:secretsmanager:us-east-2:975950814568:secret:dd-cloud-nyylCQ:JWT_KEY:AWSCURRENT" # or something like module.secret.secret_arn
+              valueFrom = "arn:aws:secretsmanager:us-east-2:975950814568:secret:dd-cloud-nyylCQ:JWT_KEY::" 
             },
             {
               name      = "DATABASE_URL"
-              valueFrom = "arn:aws:secretsmanager:us-east-2:975950814568:secret:dd-cloud-nyylCQ:DATABASE_URL:AWSCURRENT" 
+              valueFrom = "arn:aws:secretsmanager:us-east-2:975950814568:secret:dd-cloud-nyylCQ:DATABASE_URL::" 
             },
             {
               name      = "SEPOLIA_ENDPOINT"
-              valueFrom = "arn:aws:secretsmanager:us-east-2:975950814568:secret:dd-cloud-nyylCQ:SEPOLIA_ENDPOINT:AWSCURRENT"
+              valueFrom = "arn:aws:secretsmanager:us-east-2:975950814568:secret:dd-cloud-nyylCQ:SEPOLIA_ENDPOINT::"
             },
             {
               name      = "ETHEREUM_ENDPOINT"
-              valueFrom = "arn:aws:secretsmanager:us-east-2:975950814568:secret:dd-cloud-nyylCQ:ETHEREUM_ENDPOINT:AWSCURRENT"
+              valueFrom = "arn:aws:secretsmanager:us-east-2:975950814568:secret:dd-cloud-nyylCQ:ETHEREUM_ENDPOINT::"
             },
             {
               name      = "SEPOLIA_WS"
-              valueFrom = "arn:aws:secretsmanager:us-east-2:975950814568:secret:dd-cloud-nyylCQ:SEPOLIA_WS:AWSCURRENT"
+              valueFrom = "arn:aws:secretsmanager:us-east-2:975950814568:secret:dd-cloud-nyylCQ:SEPOLIA_WS::"
             }
+            
           ]
         }
       }
@@ -255,7 +261,7 @@ module "autoscaling" {
   for_each = {
     # On-demand instances
     rpc_ec2 = {
-      instance_type              = "t3.large"
+      instance_type              = "c6a.xlarge"
       use_mixed_instances_policy = false
       mixed_instances_policy     = {}
       user_data                  = <<-EOT
@@ -266,7 +272,6 @@ module "autoscaling" {
         ECS_LOGLEVEL=debug
         ECS_CONTAINER_INSTANCE_TAGS=${jsonencode(local.tags)}
         ECS_ENABLE_TASK_IAM_ROLE=true
-        echo $GATEWAY_CONFIG > ./local/path/.config.yaml
         EOF
       EOT
     }

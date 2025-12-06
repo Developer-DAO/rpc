@@ -47,7 +47,7 @@ pub struct AssetData {
     pub currency: String,
 }
 
-static WALLET: Address = address!("0b2C639c533813f4Aa9D7837CAf62653d097Ff85");
+static WALLET: Address = address!("0x6B6dE853c477022dB427d53c102c58761FDc25DA");
 
 #[derive(Debug, Clone, Copy)]
 pub struct TokenDetails {
