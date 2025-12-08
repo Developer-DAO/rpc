@@ -42,7 +42,8 @@ module "ecs" {
       managed_termination_protection = "ENABLED"
 
       managed_scaling = {
-        maximum_scaling_step_size = 5
+        desired_size = 1
+        maximum_scaling_step_size = 2
         minimum_scaling_step_size = 1
         status                    = "ENABLED"
         target_capacity           = 60
@@ -62,34 +63,27 @@ module "ecs" {
 
       # Container definition(s)
       container_definitions = {
-        # path = {
-        #   cpu                = 2048
-        #   memory             = 4096
-        #   essential          = true
-        #   image              = "ghcr.io/pokt-network/path:main"
-        #   memory_reservation = 50
-        #   port_mappings = [
-        #     {
-        #       name          = "path"
-        #       containerPort = 3069
-        #       protocol      = "tcp"
-        #     }
-        #   ]
-        #   health_check = {
-        #     command      = ["CMD-SHELL", "curl -s http://localhost:3069/healthz || exit 1"]
-        #     interval     = 30
-        #     timeout      = 5
-        #     retries      = 3
-        #     start_period = 10
-        #   }
-        #   secrets = [
-        #     {
-        #       name      = "GATEWAY_CONFIG"
-        #       valueFrom = "arn:aws:secretsmanager:us-east-2:975950814568:secret:GatewayConfig-hQSJJs"
-        #     }
-        #   ]
-        # }
-
+        path = {
+          cpu                = 2048
+          memory             = 4096
+          essential          = true
+          image              = "ghcr.io/pokt-network/path:main"
+          memory_reservation = 50
+          port_mappings = [
+            {
+              name          = "path"
+              containerPort = 3069
+              protocol      = "tcp"
+            }
+          ]
+          secrets = [
+            {
+              name      = "GATEWAY_CONFIG"
+              valueFrom = "arn:aws:secretsmanager:us-east-2:975950814568:secret:GatewayConfig-hQSJJs"
+            }
+          ]
+        }
+        
         rpc = {
           cpu       = 2048
           memory    = 4096
@@ -108,10 +102,6 @@ module "ecs" {
             }
           ]
 
-          # dependencies = [{
-          #   containerName = "path"
-          #   condition     = "HEALTHY"
-          # }]
           memory_reservation = 100
           secrets = [
             {
@@ -238,7 +228,7 @@ module "alb" {
         healthy_threshold   = 5
         interval            = 30
         matcher             = "200"
-        path                = "/"
+        path                = "/api/checkhealth"
         port                = "traffic-port"
         protocol            = "HTTP"
         timeout             = 5
@@ -298,7 +288,7 @@ module "autoscaling" {
   health_check_type   = "EC2"
   min_size            = 1
   max_size            = 5
-  desired_capacity    = 2
+  desired_capacity    = 1 
 
   # https://github.com/hashicorp/terraform-provider-aws/issues/12582
   autoscaling_group_tags = {
