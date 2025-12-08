@@ -221,15 +221,19 @@ pub mod test {
 
         assert_eq!(&res, "User was successfully registered");
 
+        let db = RELATIONAL_DATABASE.get().unwrap();
+        let mut tx = db.begin().await.unwrap();
+
         sqlx::query!("DELETE FROM Customers WHERE email = $1", &to)
-            .execute(RELATIONAL_DATABASE.get().unwrap())
+            .execute(&mut *tx)
             .await
             .unwrap();
 
         sqlx::query!("DELETE FROM RpcPlans WHERE email = $1", &to)
-            .execute(RELATIONAL_DATABASE.get().unwrap())
+            .execute(&mut *tx)
             .await
             .unwrap();
+        tx.commit().await.unwrap();
     }
 
     #[tokio::test]

@@ -132,15 +132,18 @@ pub async fn user_login_siwe(Json(payload): Json<Siwe>) -> Result<impl IntoRespo
 pub async fn user_login(
     Json(payload): Json<LoginRequest<'_>>,
 ) -> Result<impl IntoResponse, LoginError> {
+    let db = RELATIONAL_DATABASE.get().unwrap();
+    let mut tx = db.begin().await?;
     let user = sqlx::query_as!(
         Customers,
         r#"SELECT email, wallet, password, role as "role!:Role", verificationCode, activated FROM Customers 
         WHERE email = $1"#,
         &payload.email.as_str(),
     )
-    .fetch_optional(RELATIONAL_DATABASE.get().unwrap())
+    .fetch_optional(&mut *tx)
     .await?
     .ok_or_else(|| LoginError::InvalidEmailOrPassword)?;
+    tx.commit().await?;
 
     let plaintext_password = payload.password.as_bytes();
     let hashed_password =
@@ -272,14 +275,19 @@ pub mod tests {
             verificationcode: String,
         }
 
+        let db = RELATIONAL_DATABASE.get().unwrap();
+        let mut tx = db.begin().await.unwrap();
+
         let code = sqlx::query_as!(
             Code,
             "SELECT verificationCode FROM Customers WHERE email = $1",
             "abc@aol.com"
         )
-        .fetch_one(RELATIONAL_DATABASE.get().unwrap())
+        .fetch_one(&mut *tx)
         .await
         .unwrap();
+
+        tx.commit().await.unwrap();
 
         let ar = ActivationRequest {
             code: code.verificationcode,
