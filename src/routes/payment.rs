@@ -788,7 +788,7 @@ mod tests {
         let _reg_res = reqwest::Client::new()
             .post("http://localhost:3072/api/register")
             .json(&RegisterUser {
-                email: "0xe3024@gmail.com".to_string(),
+                email: "cloud@developerdao.com".to_string(),
                 password: "test".to_string(),
             })
             .send()
@@ -810,7 +810,7 @@ mod tests {
         let code = sqlx::query_as!(
             Code,
             "SELECT verificationCode FROM Customers WHERE email = $1",
-            "0xe3024@gmail.com"
+            "cloud@developerdao.com"
         )
         .fetch_one(&mut *tx)
         .await
@@ -818,13 +818,13 @@ mod tests {
 
         let ar = ActivationRequest {
             code: code.verificationcode,
-            email: "0xe3024@gmail.com".to_string(),
+            email: "cloud@developerdao.com".to_string(),
         };
         println!("Signer Address: {}", signer.address());
         sqlx::query!(
             "UPDATE Customers SET wallet = $1 where email = $2",
             signer.address().to_string(),
-            "0xe3024@gmail.com"
+            "cloud@developerdao.com"
         )
         .execute(&mut *tx)
         .await
@@ -838,7 +838,7 @@ mod tests {
             .unwrap();
 
         let lr = LoginRequest {
-            email: EmailAddress("0xe3024@gmail.com".into()),
+            email: EmailAddress("cloud@developerdao.com".into()),
             password: Password("test".into()),
         };
 
@@ -893,7 +893,7 @@ mod tests {
 
         sqlx::query!(
             "DELETE FROM Customers WHERE email = $1",
-            "0xe3024@gmail.com"
+            "cloud@developerdao.com"
         )
         .execute(&mut *tx)
         .await
@@ -901,7 +901,7 @@ mod tests {
 
         sqlx::query!(
             "DELETE FROM Payments WHERE customerEmail = $1",
-            "0xe3024@gmail.com"
+            "cloud@developerdao.com"
         )
         .execute(&mut *tx)
         .await
@@ -909,7 +909,7 @@ mod tests {
 
         sqlx::query!(
             "DELETE FROM RpcPlans WHERE email = $1",
-            "0xe3024@gmail.com"
+            "cloud@developerdao.com"
         ) 
         .execute(&mut *tx)
         .await
