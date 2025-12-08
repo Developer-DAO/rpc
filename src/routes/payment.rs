@@ -804,15 +804,12 @@ mod tests {
             verificationcode: String,
         }
 
-        let db = RELATIONAL_DATABASE.get().unwrap();
-        let mut tx = db.begin().await.unwrap();
-
         let code = sqlx::query_as!(
             Code,
             "SELECT verificationCode FROM Customers WHERE email = $1",
             "cloud@developerdao.com"
         )
-        .fetch_one(&mut *tx)
+        .fetch_one(RELATIONAL_DATABASE.get().unwrap())
         .await
         .unwrap();
 
@@ -826,7 +823,7 @@ mod tests {
             signer.address().to_string(),
             "cloud@developerdao.com"
         )
-        .execute(&mut *tx)
+        .execute(RELATIONAL_DATABASE.get().unwrap())
         .await
         .unwrap();
 
@@ -895,7 +892,7 @@ mod tests {
             "DELETE FROM Customers WHERE email = $1",
             "cloud@developerdao.com"
         )
-        .execute(&mut *tx)
+        .execute(RELATIONAL_DATABASE.get().unwrap())
         .await
         .unwrap();
 
@@ -903,7 +900,7 @@ mod tests {
             "DELETE FROM Payments WHERE customerEmail = $1",
             "cloud@developerdao.com"
         )
-        .execute(&mut *tx)
+        .execute(RELATIONAL_DATABASE.get().unwrap())
         .await
         .unwrap();
 
@@ -911,10 +908,8 @@ mod tests {
             "DELETE FROM RpcPlans WHERE email = $1",
             "cloud@developerdao.com"
         ) 
-        .execute(&mut *tx)
+        .execute(RELATIONAL_DATABASE.get().unwrap())
         .await
         .unwrap();
-
-        tx.commit().await.unwrap();
     }
 }
