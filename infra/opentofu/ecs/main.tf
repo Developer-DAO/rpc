@@ -62,33 +62,33 @@ module "ecs" {
 
       # Container definition(s)
       container_definitions = {
-        path = {
-          cpu                = 2048
-          memory             = 4096
-          essential          = true
-          image              = "ghcr.io/pokt-network/path:main"
-          memory_reservation = 50
-          port_mappings = [
-            {
-              name          = "path"
-              containerPort = 3069
-              protocol      = "tcp"
-            }
-          ]
-          health_check = {
-            command      = ["CMD-SHELL", "curl -s http://localhost:3069/healthz || exit 1"]
-            interval     = 30
-            timeout      = 5
-            retries      = 3
-            start_period = 10
-          }
-          secrets = [
-            {
-              name      = "GATEWAY_CONFIG"
-              valueFrom = "arn:aws:secretsmanager:us-east-2:975950814568:secret:GatewayConfig-hQSJJs"
-            }
-          ]
-        }
+        # path = {
+        #   cpu                = 2048
+        #   memory             = 4096
+        #   essential          = true
+        #   image              = "ghcr.io/pokt-network/path:main"
+        #   memory_reservation = 50
+        #   port_mappings = [
+        #     {
+        #       name          = "path"
+        #       containerPort = 3069
+        #       protocol      = "tcp"
+        #     }
+        #   ]
+        #   health_check = {
+        #     command      = ["CMD-SHELL", "curl -s http://localhost:3069/healthz || exit 1"]
+        #     interval     = 30
+        #     timeout      = 5
+        #     retries      = 3
+        #     start_period = 10
+        #   }
+        #   secrets = [
+        #     {
+        #       name      = "GATEWAY_CONFIG"
+        #       valueFrom = "arn:aws:secretsmanager:us-east-2:975950814568:secret:GatewayConfig-hQSJJs"
+        #     }
+        #   ]
+        # }
 
         rpc = {
           cpu       = 2048
@@ -108,10 +108,10 @@ module "ecs" {
             }
           ]
 
-          dependencies = [{
-            containerName = "path"
-            condition     = "HEALTHY"
-          }]
+          # dependencies = [{
+          #   containerName = "path"
+          #   condition     = "HEALTHY"
+          # }]
           memory_reservation = 100
           secrets = [
             {

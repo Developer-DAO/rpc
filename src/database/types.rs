@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, Pool, Postgres, migrate, postgres::PgPoolOptions};
+use std::fmt::Display;
 use std::str::FromStr;
 use std::sync::OnceLock;
-use std::fmt::Display;
 use time::OffsetDateTime;
 
 use crate::routes::types::{EmailAddress, Password};
@@ -16,11 +16,11 @@ pub struct Database;
 impl Database {
     pub async fn init() -> Result<(), Box<dyn std::error::Error>> {
         let pool = PgPoolOptions::new()
-            .after_release(|_, _| Box::pin(async move { Ok(false) }))
+            .max_connections(2)
+            //            .after_release(|_, _| Box::pin(async move { Ok(false) }))
             .connect(&dotenvy::var("DATABASE_URL").unwrap())
-            .await
-            .unwrap();
-        migrate!("./migrations").run(&pool).await.unwrap();
+            .await?;
+        migrate!("./migrations").run(&pool).await?;
         RELATIONAL_DATABASE.get_or_init(|| pool);
         Ok(())
     }
@@ -62,7 +62,9 @@ pub struct Api<'a> {
     pub apikey: String,
 }
 
-#[derive(Debug, Clone, sqlx::Type, Serialize, Deserialize, Default, Copy, PartialEq, PartialOrd)]
+#[derive(
+    Debug, Clone, sqlx::Type, Serialize, Deserialize, Default, Copy, PartialEq, PartialOrd,
+)]
 #[sqlx(type_name = "PLAN", rename_all = "lowercase")]
 pub enum Plan {
     #[default]
@@ -117,11 +119,11 @@ impl Plan {
     // Tier 3: 150M requests per month
     // price: $850/mo
 
-    /// prorate user plan based on the number of calls made 
+    /// prorate user plan based on the number of calls made
     /// this fn is pure, only calculates amount owed back
     pub fn get_prorate_amount(&self, calls: i64) -> i64 {
         let amount_per_plan = match self {
-           Plan::Free => 0,
+            Plan::Free => 0,
             Plan::Tier1 => 800,
             Plan::Tier2 => 666,
             Plan::Tier3 => 566,
