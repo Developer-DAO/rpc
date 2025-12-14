@@ -59,16 +59,9 @@ pub async fn refresh(
     let auth = key.authenticate(claims)?;
 
     let mut headers = HeaderMap::new();
-    headers.insert(
-        SET_COOKIE,
-        HeaderValue::from_str(&format!("jwt={auth}")).unwrap(),
-    );
-    headers.append(SET_COOKIE, HeaderValue::from_str("Secure").unwrap());
-    headers.append(SET_COOKIE, HeaderValue::from_str("HttpOnly").unwrap());
-    headers.append(SET_COOKIE, HeaderValue::from_str("SameSite=None").unwrap());
     headers.append(
         SET_COOKIE,
-        HeaderValue::from_str("Domain=api.cloud.developerdao.com").unwrap(),
+        HeaderValue::from_str(&format!("jwt={auth}; Secure; HttpOnly; SameSite=None")).unwrap(),
     );
 
     Ok((StatusCode::OK, headers).into_response())
@@ -115,17 +108,11 @@ pub async fn user_login_siwe(Json(payload): Json<Siwe>) -> Result<impl IntoRespo
     let auth = key.authenticate(claims)?;
 
     let mut headers = HeaderMap::new();
-    headers.insert(
-        SET_COOKIE,
-        HeaderValue::from_str(&format!("jwt={auth}")).unwrap(),
-    );
-    headers.append(SET_COOKIE, HeaderValue::from_str("Secure").unwrap());
-    headers.append(SET_COOKIE, HeaderValue::from_str("HttpOnly").unwrap());
-    headers.append(SET_COOKIE, HeaderValue::from_str("SameSite=None").unwrap());
     headers.append(
         SET_COOKIE,
-        HeaderValue::from_str("Domain=api.cloud.developerdao.com").unwrap(),
+        HeaderValue::from_str(&format!("jwt={auth}; Secure; HttpOnly; SameSite=None")).unwrap(),
     );
+
     Ok((StatusCode::OK, headers, customer.email.to_string()))
 }
 
@@ -167,16 +154,9 @@ pub async fn user_login(
     let auth = key.authenticate(claims)?;
 
     let mut headers = HeaderMap::new();
-    headers.insert(
-        SET_COOKIE,
-        HeaderValue::from_str(&format!("jwt={auth}")).unwrap(),
-    );
-    headers.append(SET_COOKIE, HeaderValue::from_str("Secure").unwrap());
-    headers.append(SET_COOKIE, HeaderValue::from_str("HttpOnly").unwrap());
-    headers.append(SET_COOKIE, HeaderValue::from_str("SameSite=None").unwrap());
     headers.append(
         SET_COOKIE,
-        HeaderValue::from_str("Domain=api.cloud.developerdao.com").unwrap(),
+        HeaderValue::from_str(&format!("jwt={auth}; Secure; HttpOnly; SameSite=None")).unwrap(),
     );
 
     Ok((StatusCode::OK, headers, "login successful!"))
