@@ -67,11 +67,7 @@ pub async fn refresh(
     headers.append(SET_COOKIE, HeaderValue::from_str("HttpOnly").unwrap());
     headers.append(
         SET_COOKIE,
-        HeaderValue::from_str("SameSite=Strict").unwrap(),
-    );
-    headers.append(
-        SET_COOKIE,
-        HeaderValue::from_str("Domain=cloud.developerdao.com").unwrap()
+        HeaderValue::from_str("SameSite=None").unwrap(),
     );
 
     Ok((StatusCode::OK, headers).into_response())
@@ -126,11 +122,7 @@ pub async fn user_login_siwe(Json(payload): Json<Siwe>) -> Result<impl IntoRespo
     headers.append(SET_COOKIE, HeaderValue::from_str("HttpOnly").unwrap());
     headers.append(
         SET_COOKIE,
-        HeaderValue::from_str("SameSite=Strict").unwrap(),
-    );
-    headers.append(
-        SET_COOKIE,
-        HeaderValue::from_str("Domain=cloud.developerdao.com").unwrap()
+        HeaderValue::from_str("SameSite=None").unwrap(),
     );
 
     Ok((StatusCode::OK, headers, customer.email.to_string()))
@@ -182,11 +174,7 @@ pub async fn user_login(
     headers.append(SET_COOKIE, HeaderValue::from_str("HttpOnly").unwrap());
     headers.append(
         SET_COOKIE,
-        HeaderValue::from_str("SameSite=Strict").unwrap(),
-    );
-    headers.append(
-        SET_COOKIE,
-        HeaderValue::from_str("Domain=cloud.developerdao.com").unwrap()
+        HeaderValue::from_str("SameSite=None").unwrap(),
     );
 
     Ok((StatusCode::OK, headers, "login successful!"))
