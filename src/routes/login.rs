@@ -63,6 +63,13 @@ pub async fn refresh(
         SET_COOKIE,
         HeaderValue::from_str(&format!("jwt={auth}")).unwrap(),
     );
+    headers.append(SET_COOKIE, HeaderValue::from_str("Secure").unwrap());
+    headers.append(SET_COOKIE, HeaderValue::from_str("HttpOnly").unwrap());
+    headers.append(SET_COOKIE, HeaderValue::from_str("SameSite=None").unwrap());
+    headers.append(
+        SET_COOKIE,
+        HeaderValue::from_str("Domain=api.cloud.developerdao.com").unwrap(),
+    );
 
     Ok((StatusCode::OK, headers).into_response())
 }
@@ -86,7 +93,7 @@ pub async fn user_login_siwe(Json(payload): Json<Siwe>) -> Result<impl IntoRespo
     let domain = if cfg!(feature = "dev") {
         "localhost:5173"
     } else {
-        "Developer DAO Cloud"
+        "cloud.developerdao.com"
     };
 
     let verification_opts = VerificationOpts {
@@ -112,7 +119,13 @@ pub async fn user_login_siwe(Json(payload): Json<Siwe>) -> Result<impl IntoRespo
         SET_COOKIE,
         HeaderValue::from_str(&format!("jwt={auth}")).unwrap(),
     );
-
+    headers.append(SET_COOKIE, HeaderValue::from_str("Secure").unwrap());
+    headers.append(SET_COOKIE, HeaderValue::from_str("HttpOnly").unwrap());
+    headers.append(SET_COOKIE, HeaderValue::from_str("SameSite=None").unwrap());
+    headers.append(
+        SET_COOKIE,
+        HeaderValue::from_str("Domain=api.cloud.developerdao.com").unwrap(),
+    );
     Ok((StatusCode::OK, headers, customer.email.to_string()))
 }
 
@@ -158,6 +171,14 @@ pub async fn user_login(
         SET_COOKIE,
         HeaderValue::from_str(&format!("jwt={auth}")).unwrap(),
     );
+    headers.append(SET_COOKIE, HeaderValue::from_str("Secure").unwrap());
+    headers.append(SET_COOKIE, HeaderValue::from_str("HttpOnly").unwrap());
+    headers.append(SET_COOKIE, HeaderValue::from_str("SameSite=None").unwrap());
+    headers.append(
+        SET_COOKIE,
+        HeaderValue::from_str("Domain=api.cloud.developerdao.com").unwrap(),
+    );
+
     Ok((StatusCode::OK, headers, "login successful!"))
 }
 
