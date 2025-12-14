@@ -137,13 +137,13 @@ module "ecs" {
         }
       }
 
-      #   load_balancer = {
-      #     service = {
-      #       target_group_arn = "arn:aws:elasticloadbalancing:eu-west-1:1234567890:targetgroup/bluegreentarget1/209a844cd01825a4"
-      #       container_name   = "ecs-sample"
-      #       container_port   = 80
-      #     }
-      #   }
+      load_balancer = {
+        service = {
+          target_group_arn = module.alb.target_groups["rpc"].arn
+          container_name   = "rpc"
+          container_port   = 3000
+        }
+      }
 
       subnet_ids = data.terraform_remote_state.vpc.outputs.private_subnets
       security_group_rules = {
@@ -174,26 +174,41 @@ data "aws_ssm_parameter" "ecs_optimized_ami" {
   name = "/aws/service/ecs/optimized-ami/amazon-linux-2/recommended"
 }
 
+resource "aws_acm_certificate" "cert" {
+  domain_name       = "api.cloud.developerdao.com"
+  validation_method = "DNS"
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+resource "aws_acm_certificate_validation" "validation" {
+  certificate_arn = aws_acm_certificate.cert.arn
+}
+
 module "alb" {
   source  = "terraform-aws-modules/alb/aws"
   version = "~> 9.0"
-
-  name = "${local.name}-alb"
-
+  name    = "${local.name}-alb"
   load_balancer_type = "application"
-
   vpc_id  = data.terraform_remote_state.vpc.outputs.vpc_id
   subnets = data.terraform_remote_state.vpc.outputs.public_subnets
 
-  # For example only - remove on prod
-  enable_deletion_protection = false
-
   # Security Group
-  security_group_ingress_rules = {
+ security_group_ingress_rules = {
     all_http = {
       from_port   = 80
       to_port     = 80
       ip_protocol = "tcp"
+      description = "HTTP web traffic"
+      cidr_ipv4   = "0.0.0.0/0"
+    }
+    all_https = {
+      from_port   = 443
+      to_port     = 443
+      ip_protocol = "tcp"
+      description = "HTTPS web traffic"
       cidr_ipv4   = "0.0.0.0/0"
     }
   }
@@ -206,8 +221,19 @@ module "alb" {
 
   listeners = {
     rpc_http = {
-      port     = 3000
+      port     = 80
       protocol = "HTTP"
+
+      redirect = {
+        port        = "443"
+        protocol    = "HTTPS"
+        status_code = "HTTP_301"
+      }
+    }
+    rpc_https = {
+      port     = 443
+      protocol = "HTTPS"
+      certificate_arn = aws_acm_certificate.cert.arn
 
       forward = {
         target_group_key = "rpc"
@@ -242,6 +268,10 @@ module "alb" {
   }
 
   tags = local.tags
+
+  depends_on = [
+    aws_acm_certificate_validation.validation
+  ]
 }
 
 module "autoscaling" {
