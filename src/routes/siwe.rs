@@ -44,7 +44,7 @@ pub async fn siwe_add_wallet(
     let domain = if cfg!(feature = "dev") {
         "localhost:5173"
     } else {
-        "api.cloud.developerdao.com"
+        "ddrpc-git-v2-developdao.vercel.app"
     };
 
     let verification_opts = VerificationOpts {
