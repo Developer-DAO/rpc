@@ -89,7 +89,7 @@ pub async fn handle_ws_conn(
             rng.fill_bytes(&mut buf);
             let sec_websocket_key = base64::encode_block(&buf);
             let request = http::Request::builder()
-                .uri("localhost:3070/v1")
+                .uri("http://localhost:3070/v1")
                 .header("Target-Service-Id", path)
                 .header(SEC_WEBSOCKET_KEY, &sec_websocket_key)
                 .header(HOST, "localhost:3070")
