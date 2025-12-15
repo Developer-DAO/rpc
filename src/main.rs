@@ -1,7 +1,7 @@
 use crate::middleware::{
     jwt_auth::verify_jwt, rpc_service::validate_subscription_and_update_user_calls,
 };
-use crate::routes::payment::upgrade;
+use crate::routes::payment::{cancel, downgrade, upgrade};
 use crate::routes::relayer::websockets::ws_handler;
 use crate::routes::types::{EmailLogin, JWTKey};
 use crate::routes::{
@@ -71,6 +71,8 @@ async fn main() {
     let payments = Router::new()
         .route("/api/pay/eth", post(process_ethereum_payment))
         .route("/api/upgrade", post(upgrade))
+        .route("/api/downgrade", post(downgrade))
+        .route("/api/cancel", post(cancel))
         .route("/api/balances", get(get_calls_and_balance))
         .route("/api/payments", get(get_payments))
         .route_layer(from_fn(verify_jwt));

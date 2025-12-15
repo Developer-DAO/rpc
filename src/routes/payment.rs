@@ -381,6 +381,7 @@ pub async fn process_ethereum_payment(
     let mut fixed = [0u8; 32];
     fixed.copy_from_slice(&hash);
 
+    #[allow(clippy::needless_borrow)]
     let eth = reqwest::Url::parse(&_endpoint).unwrap();
     let provider = ProviderBuilder::new().connect_http(eth);
 
@@ -605,7 +606,7 @@ async fn credit_account(email: &EmailAddress<'_>, mut amount: i64, plan: Option<
 
     if let Some(plan) = plan && plan.get_cost() <= amount as f64 / 100.0
     {
-        amount = amount - (plan.get_cost() * 100.0) as i64;
+        amount -= (plan.get_cost() * 100.0) as i64;
         
         sqlx::query!(
             "UPDATE RpcPlans SET plan = $1 where email = $2",
