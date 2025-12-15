@@ -7,7 +7,7 @@ use crate::{
         errors::ParsingError,
         types::{Customers, RELATIONAL_DATABASE, Role},
     },
-    eth_rpc::types::ETHEREUM_ENDPOINT,
+    routes::payment::D_D_CLOUD_API_KEY,
 };
 use alloy::{primitives::Address, providers::ProviderBuilder};
 use argon2::{Argon2, PasswordHash, PasswordVerifier};
@@ -81,7 +81,11 @@ pub async fn user_login_siwe(Json(payload): Json<Siwe>) -> Result<impl IntoRespo
     .await?
     .ok_or_else(|| LoginError::InvalidAddress)?;
 
-    let rpc = ProviderBuilder::new().connect_http(ETHEREUM_ENDPOINT[0].as_str().parse().unwrap());
+    let endpoint: String = format!(
+        "https://api.cloud.developerdao.com/rpc/eth/{}",
+        *D_D_CLOUD_API_KEY
+    );
+    let rpc = ProviderBuilder::new().connect_http(endpoint.parse().unwrap());
 
     let domain = if cfg!(feature = "dev") {
         "localhost:5173"

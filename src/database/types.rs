@@ -79,8 +79,25 @@ pub enum Chain {
     Polygon,
     Arbitrum,
     Base,
+    #[cfg(test)]
     Anvil,
+    #[cfg(test)]
     Sepolia,
+}
+
+impl Chain {
+    pub fn pokt_id(&self) -> &'static str {
+        match self {
+            Chain::Optimism => "op",
+            Chain::Polygon => "poly",
+            Chain::Arbitrum => "arb-one",
+            Chain::Base => "base",
+            #[cfg(test)]
+            Chain::Anvil => "anvil",
+            #[cfg(test)]
+            Chain::Sepolia => "sepolia",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, sqlx::Type)]
@@ -158,7 +175,9 @@ impl Display for Chain {
             Chain::Polygon => write!(f, "polygon"),
             Chain::Optimism => write!(f, "optimism"),
             Chain::Arbitrum => write!(f, "arbitrum"),
+            #[cfg(test)]
             Chain::Anvil => write!(f, "anvil"),
+            #[cfg(test)]
             Chain::Sepolia => write!(f, "sepolia"),
         }
     }

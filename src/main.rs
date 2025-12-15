@@ -55,7 +55,7 @@ async fn main() {
 
     let cors_api = CorsLayer::new()
         .allow_credentials(true)
-        .allow_origin("https://ddrpc-git-v2-developdao.vercel.app".parse::<HeaderValue>().unwrap())
+        .allow_origin("https://cloud.developerdao.com".parse::<HeaderValue>().unwrap())
         .allow_methods([Method::GET, Method::POST, Method::DELETE])
         .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION, header::COOKIE]);
 

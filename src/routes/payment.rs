@@ -1,8 +1,5 @@
 use super::types::{Claims, EmailAddress};
 use crate::database::types::{Asset, Chain, Payments, Plan, RELATIONAL_DATABASE};
-#[cfg(not(test))]
-#[cfg(not(feature = "dev"))]
-use crate::eth_rpc::types::ETHEREUM_ENDPOINT;
 #[cfg(test)]
 use crate::eth_rpc::types::TESTING_ENDPOINT;
 use alloy::consensus::Transaction;
@@ -29,6 +26,7 @@ use sqlx::types::Uuid;
 #[cfg(test)]
 use std::collections::HashMap;
 use std::num::ParseFloatError;
+use std::sync::LazyLock;
 #[cfg(test)]
 use std::sync::OnceLock;
 use thiserror::Error;
@@ -47,7 +45,7 @@ pub struct AssetData {
     pub currency: String,
 }
 
-static WALLET: Address = address!("0x6B6dE853c477022dB427d53c102c58761FDc25DA");
+static WALLET: Address = address!("0x65C67Befc1AE667E538a588295070E5d5f478B2C");
 
 #[derive(Debug, Clone, Copy)]
 pub struct TokenDetails {
@@ -124,6 +122,7 @@ pub enum Transfer {
 pub struct EthereumPayment {
     pub chain: Chain,
     pub hash: String,
+    pub plan: Option<Plan>,
 }
 
 pub struct Balances {
@@ -354,6 +353,10 @@ pub async fn upgrade(
     Ok((StatusCode::OK, "Successfully applied payment").into_response())
 }
 
+pub static D_D_CLOUD_API_KEY: LazyLock<&'static str> = LazyLock::new(|| {
+    dotenvy::var("D_D_CLOUD_API_KEY").unwrap().leak()
+});
+
 #[tracing::instrument]
 pub async fn process_ethereum_payment(
     Extension(jwt): Extension<JWTClaims<Claims<'_>>>,
@@ -361,28 +364,7 @@ pub async fn process_ethereum_payment(
 ) -> Result<impl IntoResponse, PaymentError> {
     #[cfg(not(test))]
     #[cfg(not(feature = "dev"))]
-    let _endpoint: &'static str = ETHEREUM_ENDPOINT
-        .iter()
-        .find(|e| {
-            matches!(
-                (e, payload.chain),
-                (
-                    crate::eth_rpc::types::InternalEndpoints::Optimism(_),
-                    Chain::Optimism
-                ) | (
-                    crate::eth_rpc::types::InternalEndpoints::Arbitrum(_),
-                    Chain::Arbitrum
-                ) | (
-                    crate::eth_rpc::types::InternalEndpoints::Polygon(_),
-                    Chain::Polygon
-                ) | (
-                    crate::eth_rpc::types::InternalEndpoints::Base(_),
-                    Chain::Base
-                )
-            )
-        })
-        .ok_or_else(|| PaymentError::InvalidNetwork)?
-        .as_str();
+    let _endpoint: String = format!("https://api.cloud.developerdao.com/rpc/{}/{}", payload.chain.pokt_id(), *D_D_CLOUD_API_KEY);
 
     #[cfg(test)]
     let _endpoint: &'static str = TESTING_ENDPOINT.get().unwrap();
@@ -399,7 +381,7 @@ pub async fn process_ethereum_payment(
     let mut fixed = [0u8; 32];
     fixed.copy_from_slice(&hash);
 
-    let eth = reqwest::Url::parse(_endpoint).unwrap();
+    let eth = reqwest::Url::parse(&_endpoint).unwrap();
     let provider = ProviderBuilder::new().connect_http(eth);
 
     let p1 = provider.clone();
@@ -410,8 +392,6 @@ pub async fn process_ethereum_payment(
                 .ok_or_else(|| PaymentError::TxNotFound)
         });
     
-
-
     let p2 = provider.clone();
     let receipt: tokio::task::JoinHandle<Result<TransactionReceipt, PaymentError>> = {
         tokio::spawn(async move {
@@ -561,8 +541,9 @@ pub async fn process_ethereum_payment(
         }
     };
 
-    credit_account(&payment.customeremail, payment.usdvalue).await?;
+    credit_account(&payment.customeremail, payment.usdvalue, payload.plan).await?;
     insert_payment(&payment).await?;
+
     Ok((StatusCode::OK, payment.usdvalue.to_string()).into_response())
 }
 
@@ -580,7 +561,6 @@ pub async fn process_ethereum_payment(
 // }
 
 async fn stablecoin_fixedpoint_conversion(
-//    asset: Asset,
     amount: U256,
     decimals: u8,
 ) -> Result<U256, PaymentError> {
@@ -618,10 +598,25 @@ async fn insert_payment(payment: &Payments<'_>) -> Result<(), PaymentError> {
     Ok(())
 }
 
-async fn credit_account(email: &EmailAddress<'_>, amount: i64) -> Result<(), PaymentError> {
+async fn credit_account(email: &EmailAddress<'_>, mut amount: i64, plan: Option<Plan>) -> Result<(), PaymentError> {
     // only updates account balance based on transaction
     let db_connection = RELATIONAL_DATABASE.get().unwrap();
     let mut transaction = db_connection.begin().await?;
+
+    if let Some(plan) = plan && plan.get_cost() <= amount as f64 / 100.0
+    {
+        amount = amount - (plan.get_cost() * 100.0) as i64;
+        
+        sqlx::query!(
+            "UPDATE RpcPlans SET plan = $1 where email = $2",
+            plan as Plan,
+            email.as_str(),
+        )
+        .execute(&mut *transaction)
+        .await?;
+
+    }
+
     sqlx::query!(
         "UPDATE Customers SET balance = balance + $1 where email = $2",
         amount,
@@ -855,6 +850,7 @@ mod tests {
         let usdc_payment = EthereumPayment {
             chain: Chain::Anvil,
             hash: usdc_tx_hash.to_string(),
+            plan: None,
         };
 
         // let eth_payment = EthereumPayment {

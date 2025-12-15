@@ -131,8 +131,11 @@ module "ecs" {
             {
               name      = "SEPOLIA_WS"
               valueFrom = "arn:aws:secretsmanager:us-east-2:975950814568:secret:dd-cloud-nyylCQ:SEPOLIA_WS::"
+            },
+            {
+              name      = "D_D_CLOUD_API_KEY"
+              valueFrom = "arn:aws:secretsmanager:us-east-2:975950814568:secret:dd-cloud-nyylCQ:D_D_CLOUD_API_KEY::"
             }
-            
           ]
         }
       }
