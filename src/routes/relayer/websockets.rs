@@ -6,13 +6,9 @@ use axum::response::IntoResponse;
 use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::{SinkExt, StreamExt};
 use http::StatusCode;
-use http::header::{CONNECTION, HOST, SEC_WEBSOCKET_KEY, SEC_WEBSOCKET_VERSION, UPGRADE};
-use openssl::base64;
-// use http::header::{CONNECTION, HOST, SEC_WEBSOCKET_KEY, SEC_WEBSOCKET_VERSION, UPGRADE};
-// use openssl::base64;
-use rand::{RngCore, SeedableRng, rngs::StdRng};
 use thiserror::Error;
 use tokio::{select, sync::mpsc};
+use tokio_tungstenite::tungstenite::ClientRequestBuilder;
 use tokio_tungstenite::{
     connect_async_tls_with_config, tungstenite::Message as TungsteniteMessage,
 };
@@ -84,20 +80,8 @@ pub async fn handle_ws_conn(
                 cleanup_tx.send(Command::Kill).unwrap();
                 break 'reconnect;
             }
-            let mut buf = [0u8; 16];
-            let mut rng: StdRng = StdRng::from_rng(&mut rand::rng());
-            rng.fill_bytes(&mut buf);
-            let sec_websocket_key = base64::encode_block(&buf);
-            let request = http::Request::builder()
-                .uri("http://localhost:3070/v1")
-                .header("Target-Service-Id", path)
-                .header(SEC_WEBSOCKET_KEY, &sec_websocket_key)
-                .header(HOST, "localhost:3070")
-                .header(UPGRADE, "websocket")
-                .header(CONNECTION, "upgrade")
-                .header(SEC_WEBSOCKET_VERSION, 13)
-                .body(())
-                .unwrap();
+            let request = ClientRequestBuilder::new("http://localhost:3070/v1".parse().unwrap())
+                .with_header("Target-Service-Id", String::from(path.id()));
 
             let (node_socket, _res) = connect_async_tls_with_config(request, None, false, None)
                 .await
