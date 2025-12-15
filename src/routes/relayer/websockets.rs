@@ -6,6 +6,8 @@ use axum::response::IntoResponse;
 use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::{SinkExt, StreamExt};
 use http::StatusCode;
+use http::header::{CONNECTION, HOST, SEC_WEBSOCKET_KEY, SEC_WEBSOCKET_VERSION, UPGRADE};
+use openssl::base64;
 // use http::header::{CONNECTION, HOST, SEC_WEBSOCKET_KEY, SEC_WEBSOCKET_VERSION, UPGRADE};
 // use openssl::base64;
 use rand::{RngCore, SeedableRng, rngs::StdRng};
@@ -85,30 +87,21 @@ pub async fn handle_ws_conn(
             let mut buf = [0u8; 16];
             let mut rng: StdRng = StdRng::from_rng(&mut rand::rng());
             rng.fill_bytes(&mut buf);
-            //            let sec_websocket_key = base64::encode_block(&buf);
-            //  = if cfg!(test) {
-            //     let request = http::Request::builder()
-            //         .uri("localhost:3070/v1")
-            //         .header("Target-Service-Id", path)
-            //         .header(SEC_WEBSOCKET_KEY, &sec_websocket_key)
-            //         .header(HOST, "localhost:3070")
-            //         .header(UPGRADE, "websocket")
-            //         .header(CONNECTION, "upgrade")
-            //         .header(SEC_WEBSOCKET_VERSION, 13)
-            //         .body(())
-            //         .unwrap();
-            //     connect_async_tls_with_config(request, None, false, None)
-            //         .await
-            //         .unwrap()
-            // } else {
-            // };
+            let sec_websocket_key = base64::encode_block(&buf);
+            let request = http::Request::builder()
+                .uri("localhost:3070/v1")
+                .header("Target-Service-Id", path)
+                .header(SEC_WEBSOCKET_KEY, &sec_websocket_key)
+                .header(HOST, "localhost:3070")
+                .header(UPGRADE, "websocket")
+                .header(CONNECTION, "upgrade")
+                .header(SEC_WEBSOCKET_VERSION, 13)
+                .body(())
+                .unwrap();
 
-            let (node_socket, _res) = {
-                let url = dotenvy::var("SEPOLIA_WS").unwrap();
-                connect_async_tls_with_config(url, None, false, None)
-                    .await
-                    .unwrap()
-            };
+            let (node_socket, _res) = connect_async_tls_with_config(request, None, false, None)
+                .await
+                .unwrap();
 
             let (mut node_tx, mut node_rv) = node_socket.split();
 
@@ -126,7 +119,6 @@ pub async fn handle_ws_conn(
                         user_tx.send(Message::Close(None)).await.unwrap();
                     }
                     Some(Ok(msg)) = node_rv.next() => {
-                        info!("{msg}");
                         if let Some(m) = convert(msg) {
                             match m {
                                 Message::Text(_) => {
