@@ -12,7 +12,7 @@ use tokio_tungstenite::tungstenite::ClientRequestBuilder;
 use tokio_tungstenite::{
     connect_async_tls_with_config, tungstenite::Message as TungsteniteMessage,
 };
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 pub async fn ws_handler(
     ws: WebSocketUpgrade,
@@ -54,13 +54,15 @@ pub async fn handle_user_msgs(
     tokio::spawn(async move {
         // max wait time?
         select! {
-            Some(Command::Kill) = cleanup_rx.recv() => {
-            },
+            Some(Command::Kill) = cleanup_rx.recv() => {},
             Some(Ok(Message::Close(_close_frame))) = user_rv.next() => {
                 shutdown_tx.send(Command::Kill).unwrap();
             }
+            // prevents a panic
+            else => {
+                debug!("User channel and ws channel dropped");
+            }
         }
-
         warn!("Exiting user msg handler");
     });
 }
@@ -80,15 +82,20 @@ pub async fn handle_ws_conn(
                 cleanup_tx.send(Command::Kill).unwrap();
                 break 'reconnect;
             }
-            let request = ClientRequestBuilder::new("ws://localhost:3070/v1".parse().unwrap())
+            let request = ClientRequestBuilder::new("ws://localhost:3069/v1".parse().unwrap())
                 .with_header("Target-Service-Id", String::from(path.id()));
 
-            let Ok((node_socket, _res)) =
-                connect_async_tls_with_config(request, None, false, None).await
-            else {
-                tracing::error!("Failed to connect to websocket");
-                break 'reconnect;
-            };
+            let (node_socket, _res) =
+                match connect_async_tls_with_config(request, None, false, None).await {
+                    Ok((node_socket, _res)) => (node_socket, _res),
+                    Err(e) => {
+                        tracing::error!("Failed to connect to websocket: {e}");
+                        if let Err(e) = cleanup_tx.send(Command::Kill) {
+                            debug!("Failed to clean up user channel: {e}");
+                        }
+                        break 'reconnect;
+                    }
+                };
 
             let (mut node_tx, mut node_rv) = node_socket.split();
 
