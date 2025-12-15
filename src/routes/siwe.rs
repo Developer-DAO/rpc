@@ -44,7 +44,7 @@ pub async fn siwe_add_wallet(
     let domain = if cfg!(feature = "dev") {
         "localhost:5173"
     } else {
-        "cloud.developerdao.com"
+        "api.cloud.developerdao.com"
     };
 
     let verification_opts = VerificationOpts {
