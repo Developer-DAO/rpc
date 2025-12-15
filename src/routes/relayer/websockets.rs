@@ -80,12 +80,15 @@ pub async fn handle_ws_conn(
                 cleanup_tx.send(Command::Kill).unwrap();
                 break 'reconnect;
             }
-            let request = ClientRequestBuilder::new("http://localhost:3070/v1".parse().unwrap())
+            let request = ClientRequestBuilder::new("ws://localhost:3070/v1".parse().unwrap())
                 .with_header("Target-Service-Id", String::from(path.id()));
 
-            let (node_socket, _res) = connect_async_tls_with_config(request, None, false, None)
-                .await
-                .unwrap();
+            let Ok((node_socket, _res)) =
+                connect_async_tls_with_config(request, None, false, None).await
+            else {
+                tracing::error!("Failed to connect to websocket");
+                break 'reconnect;
+            };
 
             let (mut node_tx, mut node_rv) = node_socket.split();
 
