@@ -81,7 +81,7 @@ pub enum Chain {
     Base,
     #[cfg(test)]
     Anvil,
-    #[cfg(test)]
+    #[cfg(feature = "dev")]
     Sepolia,
 }
 
@@ -94,7 +94,7 @@ impl Chain {
             Chain::Base => "base",
             #[cfg(test)]
             Chain::Anvil => "anvil",
-            #[cfg(test)]
+            #[cfg(feature = "dev")]
             Chain::Sepolia => "sepolia",
         }
     }
@@ -177,7 +177,7 @@ impl Display for Chain {
             Chain::Arbitrum => write!(f, "arbitrum"),
             #[cfg(test)]
             Chain::Anvil => write!(f, "anvil"),
-            #[cfg(test)]
+            #[cfg(feature = "dev")]
             Chain::Sepolia => write!(f, "sepolia"),
         }
     }
