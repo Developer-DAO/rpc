@@ -43,7 +43,7 @@ module "ecs" {
 
       managed_scaling = {
         desired_size = 1
-        maximum_scaling_step_size = 2
+        maximum_scaling_step_size = 1
         minimum_scaling_step_size = 1
         status                    = "ENABLED"
         target_capacity           = 60
@@ -326,7 +326,7 @@ module "autoscaling" {
   capacity_rebalance  = true
   health_check_type   = "EC2"
   min_size            = 1
-  max_size            = 5
+  max_size            = 2
   desired_capacity    = 1 
 
   # https://github.com/hashicorp/terraform-provider-aws/issues/12582
