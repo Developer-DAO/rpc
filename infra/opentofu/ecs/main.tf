@@ -285,11 +285,16 @@ module "autoscaling" {
     # On-demand instances
     rpc_ec2 = {
       instance_type              = "c6a.xlarge"
-      use_mixed_instances_policy = false
-      mixed_instances_policy     = {}
+      use_mixed_instances_policy = true
+      mixed_instances_policy     = {
+        instances_distribution = {
+          on_demand_base_capacity                  = 0
+          on_demand_percentage_above_base_capacity = 25
+          spot_allocation_strategy                 = "price-capacity-optimized"
+        }
+      }
       user_data                  = <<-EOT
         #!/bin/bash
-
         cat <<'EOF' >> /etc/ecs/ecs.config
         ECS_CLUSTER=${local.name}
         ECS_LOGLEVEL=debug
@@ -318,6 +323,7 @@ module "autoscaling" {
   }
 
   vpc_zone_identifier = data.terraform_remote_state.vpc.outputs.private_subnets
+  capacity_rebalance  = true
   health_check_type   = "EC2"
   min_size            = 1
   max_size            = 5
@@ -330,6 +336,10 @@ module "autoscaling" {
 
   # Required for  managed_termination_protection = "ENABLED"
   protect_from_scale_in = true
+
+  instance_market_options = {
+    market_type = "spot"
+  }
 
   # Spot instances
   use_mixed_instances_policy = each.value.use_mixed_instances_policy
