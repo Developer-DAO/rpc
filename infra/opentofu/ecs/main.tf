@@ -332,6 +332,7 @@ module "autoscaling" {
   # https://github.com/hashicorp/terraform-provider-aws/issues/12582
   autoscaling_group_tags = {
     AmazonECSManaged = true
+    propagate_at_launch = true
   }
 
   # Required for managed_termination_protection = "ENABLED"
