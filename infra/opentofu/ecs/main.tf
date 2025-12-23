@@ -334,12 +334,8 @@ module "autoscaling" {
     AmazonECSManaged = true
   }
 
-  # Required for  managed_termination_protection = "ENABLED"
+  # Required for managed_termination_protection = "ENABLED"
   protect_from_scale_in = true
-
-  instance_market_options = {
-    market_type = "spot"
-  }
 
   # Spot instances
   use_mixed_instances_policy = each.value.use_mixed_instances_policy
