@@ -64,8 +64,8 @@ module "ecs" {
       # Container definition(s)
       container_definitions = {
         path = {
-          cpu                = 2048
-          memory             = 4096
+          cpu                = 1024
+          memory             = 2048
           essential          = true
           image              = "ghcr.io/pokt-network/path:main"
           memory_reservation = 50
@@ -85,8 +85,8 @@ module "ecs" {
         }
         
         rpc = {
-          cpu       = 2048
-          memory    = 4096
+          cpu       = 1024
+          memory    = 2048
           essential = true
           image     = var.rpc_image
 
@@ -284,15 +284,9 @@ module "autoscaling" {
   for_each = {
     # On-demand instances
     rpc_ec2 = {
-      instance_type              = "c6a.xlarge"
-      use_mixed_instances_policy = true
-      mixed_instances_policy     = {
-        instances_distribution = {
-          on_demand_base_capacity                  = 0
-          on_demand_percentage_above_base_capacity = 25
-          spot_allocation_strategy                 = "price-capacity-optimized"
-        }
-      }
+      instance_type              = "c6a.large"
+      use_mixed_instances_policy = false
+      mixed_instances_policy     = {}
       user_data                  = <<-EOT
         #!/bin/bash
         cat <<'EOF' >> /etc/ecs/ecs.config
