@@ -58,8 +58,8 @@ module "ecs" {
 
   services = {
     dd-rpc = {
-      cpu    = 4096
-      memory = 8192
+      cpu    = 2048
+      memory = 4096
 
       # Container definition(s)
       container_definitions = {
