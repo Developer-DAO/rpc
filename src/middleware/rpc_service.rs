@@ -67,6 +67,7 @@ pub async fn validate_subscription_and_update_user_calls(
     Ok(next.run(request).await)
 }
 
+#[derive(Debug)]
 pub struct RenewInfo<'a> {
     email: EmailAddress<'a>,
     plan: Plan,
@@ -92,7 +93,7 @@ pub async fn refill_calls_and_renew_plans() -> Result<(), RpcAuthErrors> {
                 balance, 
                 Customers.email, 
                 plan as "plan!: Plan", 
-                downgradeto as "downgradeto!: Plan" 
+                downgradeto as "downgradeto!: Option<Plan>"
             FROM 
                 RpcPlans
             INNER JOIN 
