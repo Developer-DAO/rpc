@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT \n                balance, \n                Customers.email, \n                plan as \"plan!: Plan\", \n                downgradeto as \"downgradeto!: Plan\" \n            FROM \n                RpcPlans\n            INNER JOIN \n                Customers \n            ON \n                RpcPlans.email = Customers.email\n            WHERE \n                now() >= expires\n        ",
+  "query": "\n            SELECT \n                balance, \n                Customers.email, \n                plan as \"plan!: Plan\", \n                downgradeto as \"downgradeto!: Option<Plan>\"\n            FROM \n                RpcPlans\n            INNER JOIN \n                Customers \n            ON \n                RpcPlans.email = Customers.email\n            WHERE \n                now() >= expires\n        ",
   "describe": {
     "columns": [
       {
@@ -32,7 +32,7 @@
       },
       {
         "ordinal": 3,
-        "name": "downgradeto!: Plan",
+        "name": "downgradeto!: Option<Plan>",
         "type_info": {
           "Custom": {
             "name": "plan",
@@ -58,5 +58,5 @@
       true
     ]
   },
-  "hash": "c8f2b164ed7e600205fa77d71cda3a4c74e7e1341742f9532dc068f0be8b00b2"
+  "hash": "a56fbf79116ec7c385722a11e8ce3e90ded0d59ebd97150da9e5f398deed231f"
 }
