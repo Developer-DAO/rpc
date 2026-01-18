@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT balance, Customers.email, plan as \"plan!: Plan\", expires, downgradeto as \"downgradeto!: Plan\" FROM RpcPlans, Customers where now() >= expires\n        ",
+  "query": "\n            SELECT \n                balance, \n                Customers.email, \n                plan as \"plan!: Plan\", \n                downgradeto as \"downgradeto!: Plan\" \n            FROM \n                RpcPlans\n            INNER JOIN \n                Customers \n            ON \n                RpcPlans.email = Customers.email\n            WHERE \n                now() >= expires\n        ",
   "describe": {
     "columns": [
       {
@@ -32,11 +32,6 @@
       },
       {
         "ordinal": 3,
-        "name": "expires",
-        "type_info": "Timestamptz"
-      },
-      {
-        "ordinal": 4,
         "name": "downgradeto!: Plan",
         "type_info": {
           "Custom": {
@@ -60,9 +55,8 @@
       false,
       false,
       false,
-      false,
       true
     ]
   },
-  "hash": "50dcb9287709d4b745b8ac0f02fa910ea1837d78c89f90fa278bf5e1875e9bdc"
+  "hash": "c8f2b164ed7e600205fa77d71cda3a4c74e7e1341742f9532dc068f0be8b00b2"
 }

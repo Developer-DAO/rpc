@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT email, calls, plan as \"plan!: Plan\", expires\n        FROM RpcPlans\n        WHERE \n        email = (SELECT customerEmail FROM Api WHERE apiKey = $1) \n        ",
+  "query": "\n            SELECT email, calls, plan as \"plan!: Plan\", expires\n            FROM RpcPlans\n            WHERE\n            email = (SELECT customerEmail FROM Api WHERE apiKey = $1) \n        ",
   "describe": {
     "columns": [
       {
@@ -48,5 +48,5 @@
       false
     ]
   },
-  "hash": "ad236e6958d9b1b2c38977266814a35f24a23851d9c5fa9fa8acc45465076ee1"
+  "hash": "b937e25fe58b953b2df93fffb1dfc8dfb6b3ed2f9c04add6b3e86b6c1a5431d1"
 }

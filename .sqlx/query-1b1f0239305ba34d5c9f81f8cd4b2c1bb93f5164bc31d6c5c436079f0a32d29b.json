@@ -1,0 +1,27 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE RpcPlans SET plan = $1, downgradeto = NULL where email = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        {
+          "Custom": {
+            "name": "plan",
+            "kind": {
+              "Enum": [
+                "free",
+                "tier1",
+                "tier2",
+                "tier3"
+              ]
+            }
+          }
+        },
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1b1f0239305ba34d5c9f81f8cd4b2c1bb93f5164bc31d6c5c436079f0a32d29b"
+}

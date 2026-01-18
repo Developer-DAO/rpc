@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE \n            RpcPlans \n        SET \n            calls = 0,\n            created = CURRENT_TIMESTAMP, \n            expires = CURRENT_TIMESTAMP + INTERVAL '1 months'\n        WHERE \n            now() >= expires AND calls > 0",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "8a38b523a335752201cfe1c8eafe8c2b7ecf1e3ca8281201ed75ec97ce956e81"
+}
