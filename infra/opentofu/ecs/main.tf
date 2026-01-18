@@ -66,7 +66,6 @@ module "ecs" {
         path = {
           cpu                = 1024
           memory             = 2048
-          essential          = true
           image              = "ghcr.io/pokt-network/path:main"
           memory_reservation = 50
           port_mappings = [
