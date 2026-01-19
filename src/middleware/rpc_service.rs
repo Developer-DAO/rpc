@@ -115,7 +115,7 @@ pub async fn refill_calls_and_renew_plans() -> Result<(), RpcAuthErrors> {
             created = CURRENT_TIMESTAMP, 
             expires = CURRENT_TIMESTAMP + INTERVAL '1 months'
         WHERE 
-            now() >= expires AND calls > 0"
+            now() >= expires"
     )
     .execute(&mut *tx)
     .await?;
