@@ -20,7 +20,7 @@ data "aws_ami" "ecs_ami" {
 
 module "ecs" {
   source = "terraform-aws-modules/ecs/aws"
-  version = "5.12.1"
+  version = "7.3.0"
 
   cluster_name = "rpc-ecs-cluster"
 
@@ -33,18 +33,13 @@ module "ecs" {
     }
   }
 
-  default_capacity_provider_use_fargate = true
-
-  fargate_capacity_providers = {
+  cluster_capacity_providers = ["FARGATE", "FARGATE_SPOT"]
+  default_capacity_provider_strategy = {
     FARGATE = {
-      default_capacity_provider_strategy = {
         weight = 20
-      }
     }
     FARGATE_SPOT = {
-      default_capacity_provider_strategy = {
         weight = 80
-      }
     }
   }
 
@@ -52,6 +47,11 @@ module "ecs" {
     dd-rpc = {
       cpu    = 2048
       memory = 4096
+
+      runtime_platform = {
+        cpu_architecture        = "ARM64"
+        operating_system_family = "LINUX"
+      }
 
       # Container definition(s)
       container_definitions = {
@@ -86,7 +86,7 @@ module "ecs" {
             credentialsParameter = "arn:aws:secretsmanager:us-east-2:975950814568:secret:GhcrCredentials-j8eElR"
           }
 
-          port_mappings = [
+          portMappings = [
             {
               name          = "dd-rpc"
               containerPort = 3000
@@ -184,7 +184,7 @@ resource "aws_acm_certificate_validation" "validation" {
 
 module "alb" {
   source  = "terraform-aws-modules/alb/aws"
-  version = "~> 9.0"
+  version = "~> 10.5"
   name    = "${local.name}-alb"
   load_balancer_type = "application"
   vpc_id  = data.terraform_remote_state.vpc.outputs.vpc_id
