@@ -33,25 +33,17 @@ module "ecs" {
     }
   }
 
-  # Capacity provider - autoscaling groups
-  default_capacity_provider_use_fargate = false
-  autoscaling_capacity_providers = {
-    # On-demand instances
-    rpc_ec2 = {
-      auto_scaling_group_arn         = module.autoscaling["rpc_ec2"].autoscaling_group_arn
-      managed_termination_protection = "ENABLED"
+  default_capacity_provider_use_fargate = true
 
-      managed_scaling = {
-        desired_size = 1
-        maximum_scaling_step_size = 1
-        minimum_scaling_step_size = 1
-        status                    = "ENABLED"
-        target_capacity           = 60
-      }
-
+  fargate_capacity_providers = {
+    FARGATE = {
       default_capacity_provider_strategy = {
-        weight = 60
-        base   = 20
+        weight = 20
+      }
+    }
+    FARGATE_SPOT = {
+      default_capacity_provider_strategy = {
+        weight = 80
       }
     }
   }
@@ -275,87 +267,4 @@ module "alb" {
   depends_on = [
     aws_acm_certificate_validation.validation
   ]
-}
-
-module "autoscaling" {
-  source  = "terraform-aws-modules/autoscaling/aws"
-  version = "~> 6.5"
-
-  for_each = {
-    # On-demand instances
-    rpc_ec2 = {
-      instance_type              = "c6a.large"
-      use_mixed_instances_policy = false
-      mixed_instances_policy     = {}
-      user_data                  = <<-EOT
-        #!/bin/bash
-        cat <<'EOF' >> /etc/ecs/ecs.config
-        ECS_CLUSTER=${local.name}
-        ECS_LOGLEVEL=debug
-        ECS_CONTAINER_INSTANCE_TAGS=${jsonencode(local.tags)}
-        ECS_ENABLE_TASK_IAM_ROLE=true
-        EOF
-      EOT
-    }
-  }
-
-  name = "${local.name}-${each.key}"
-
-  image_id      = jsondecode(data.aws_ssm_parameter.ecs_optimized_ami.value)["image_id"]
-  instance_type = each.value.instance_type
-
-  security_groups                 = [module.autoscaling_sg.security_group_id]
-  user_data                       = base64encode(each.value.user_data)
-  ignore_desired_capacity_changes = true
-
-  create_iam_instance_profile = true
-  iam_role_name               = local.name
-  iam_role_description        = "ECS role for ${local.name}"
-  iam_role_policies = {
-    AmazonEC2ContainerServiceforEC2Role = "arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role"
-    AmazonSSMManagedInstanceCore        = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
-  }
-
-  vpc_zone_identifier = data.terraform_remote_state.vpc.outputs.private_subnets
-  capacity_rebalance  = true
-  health_check_type   = "EC2"
-  min_size            = 1
-  max_size            = 2
-  desired_capacity    = 1 
-
-  # https://github.com/hashicorp/terraform-provider-aws/issues/12582
-  autoscaling_group_tags = {
-    AmazonECSManaged = true
-    propagate_at_launch = true
-  }
-
-  # Required for managed_termination_protection = "ENABLED"
-  protect_from_scale_in = true
-
-  # Spot instances
-  use_mixed_instances_policy = each.value.use_mixed_instances_policy
-  mixed_instances_policy     = each.value.mixed_instances_policy
-
-  tags = local.tags
-}
-
-module "autoscaling_sg" {
-  source  = "terraform-aws-modules/security-group/aws"
-  version = "~> 5.0"
-
-  name        = local.name
-  description = "Autoscaling group security group"
-  vpc_id      = data.terraform_remote_state.vpc.outputs.vpc_id
-
-  computed_ingress_with_source_security_group_id = [
-    {
-      rule                     = "http-80-tcp"
-      source_security_group_id = module.alb.security_group_id
-    }
-  ]
-  number_of_computed_ingress_with_source_security_group_id = 1
-
-  egress_rules = ["all-all"]
-
-  tags = local.tags
 }
