@@ -1,6 +1,10 @@
+DROP TYPE IF EXISTS PLAN;
 CREATE TYPE PLAN AS ENUM('free', 'tier1', 'tier2', 'tier3');
+DROP TYPE IF EXISTS CHAIN;
 CREATE TYPE CHAIN AS ENUM('optimism', 'polygon', 'arbitrum', 'base', 'anvil', 'sepolia');
+DROP TYPE IF EXISTS ASSET;
 CREATE TYPE ASSET AS ENUM('ether', 'usdc');
+DROP TYPE IF EXISTS ROLE;
 CREATE TYPE ROLE AS ENUM('normie', 'admin');
 
 CREATE TABLE IF NOT EXISTS Customers (
