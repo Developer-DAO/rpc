@@ -1,4 +1,5 @@
 pub mod activate;
+pub mod token_queries;
 pub mod api_keys;
 pub mod login;
 pub mod payment;

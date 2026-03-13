@@ -28,7 +28,7 @@ impl From<PoktChains> for HeaderValue {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum PoktChains {
     #[cfg(any(test, feature = "dev"))]
     Anvil,
