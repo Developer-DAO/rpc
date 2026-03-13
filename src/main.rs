@@ -3,6 +3,7 @@ use crate::middleware::{
 };
 use crate::routes::payment::{cancel, downgrade, upgrade};
 use crate::routes::relayer::websockets::ws_handler;
+use crate::routes::token_queries::{aggregate_balances, aggregate_single_token_bals, aggregate_token_bals_for_user, get_batch_nft_info};
 use crate::routes::types::{EmailLogin, JWTKey};
 use crate::routes::{
     activate::activate_account,
@@ -64,10 +65,18 @@ async fn main() {
         .route("/ws/{chain}/{api_key}", axum::routing::any(ws_handler))
         .route_layer(from_fn(validate_subscription_and_update_user_calls));
 
+    let token_queries = Router::new()
+        .route("/v1/tokens/balances/{chain}/{api_key}", get(aggregate_balances))
+        .route("/v1/tokens/single_token_balances/{chain}/{api_key}", get(aggregate_single_token_bals))
+        .route("/v1/tokens/many_token_balances/{chain}/{api_key}", get(aggregate_token_bals_for_user))
+        .route("/v1/nfts/ownership/{chain}/{api_key}", get(get_batch_nft_info))
+        .route_layer(from_fn(validate_subscription_and_update_user_calls));
+
     let api_keys = Router::new()
         .route("/api/keys", get(get_all_api_keys).post(generate_api_keys))
         .route("/api/keys/{key}", delete(delete_key))
         .route_layer(from_fn(verify_jwt));
+
     let payments = Router::new()
         .route("/api/pay/eth", post(process_ethereum_payment))
         .route("/api/upgrade", post(upgrade))
@@ -76,6 +85,7 @@ async fn main() {
         .route("/api/balances", get(get_calls_and_balance))
         .route("/api/payments", get(get_payments))
         .route_layer(from_fn(verify_jwt));
+
     let siwe = Router::new()
         .route("/api/refresh", post(refresh))
         .route("/api/siwe/add_wallet", post(siwe_add_wallet))
@@ -98,6 +108,7 @@ async fn main() {
         .merge(siwe)
         .merge(payments)
         .layer(cors_api)
+        .merge(token_queries)
         .merge(relayer);
 
     info!("Initialized D_D RPC on 0.0.0.0:3000");

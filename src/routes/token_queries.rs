@@ -80,11 +80,10 @@ sol! {
 }
 
 // Many tokens, many users
-pub async fn tokens(
+pub async fn aggregate_balances(
+    Path((chain, _)): Path<(PoktChains, String)>,
     Json(payload): Json<Vec<TokenBalanceQuery>>,
-    Query(chain): Query<PoktChains>,
 ) -> Result<impl IntoResponse, QueryError> {
-
     if payload.len() > 1000 {
         Err(QueryError::ERC20QueryLimit)?
     }
@@ -98,10 +97,8 @@ pub async fn tokens(
     let c_addr = *TOKEN_QUERY_UTIL_DEPLOYMENTS
         .get(&chain)
         .ok_or_else(|| QueryError::ChainError)?;
-    let contract = TokenQueryContractInstance::new(
-        c_addr, provider,
-    );
 
+    let contract = TokenQueryContractInstance::new(c_addr, provider);
     let res = contract.aggregateBalances(payload).call().await?;
 
     Ok((StatusCode::OK, serde_json::to_string(&res)?).into_response())
@@ -109,8 +106,8 @@ pub async fn tokens(
 
 // one token, many users
 pub async fn aggregate_token_bals_for_user(
-    Path((chain, address)): Path<(PoktChains, Address)>,
-    Query(tokens): Query<Vec<Address>>,
+    Path((chain, _)): Path<(PoktChains, String)>,
+    Query((address, tokens)): Query<(Address, Vec<Address>)>,
 ) -> Result<impl IntoResponse, QueryError> {
     if tokens.len() > 1000 {
         Err(QueryError::ERC20QueryLimit)?
@@ -136,8 +133,8 @@ pub async fn aggregate_token_bals_for_user(
 
 // many users, one token
 pub async fn aggregate_single_token_bals(
-    Path((chain, token_address)): Path<(PoktChains, Address)>,
-    Query(users): Query<Vec<Address>>,
+    Path((chain, _)): Path<(PoktChains, String)>,
+    Query((token_address, users)): Query<(Address, Vec<Address>)>,
 ) -> Result<impl IntoResponse, QueryError> {
     if users.len() > 1000 {
         Err(QueryError::ERC20QueryLimit)?
@@ -152,9 +149,7 @@ pub async fn aggregate_single_token_bals(
     let c_addr = *TOKEN_QUERY_UTIL_DEPLOYMENTS
         .get(&chain)
         .ok_or_else(|| QueryError::ChainError)?;
-    let contract = TokenQueryContractInstance::new(
-        c_addr, provider,
-    );
+    let contract = TokenQueryContractInstance::new(c_addr, provider);
     let res = contract
         .aggregateSingleTokenBals(users, token_address)
         .call()
@@ -164,9 +159,9 @@ pub async fn aggregate_single_token_bals(
 }
 
 pub async fn get_batch_nft_info(
-    Query((chain, collection, offset, limit)): Query<(PoktChains, Address, u16, u16)>,
+    Path((chain, _)): Path<(PoktChains, String)>,
+    Query((collection, offset, limit)): Query<(Address, u16, u16)>,
 ) -> Result<impl IntoResponse, QueryError> {
-
     if limit > 10000 {
         Err(QueryError::NFTQueryLimit)?
     }
@@ -180,9 +175,7 @@ pub async fn get_batch_nft_info(
     let c_addr = *TOKEN_QUERY_UTIL_DEPLOYMENTS
         .get(&chain)
         .ok_or_else(|| QueryError::ChainError)?;
-    let contract = TokenQueryContractInstance::new(
-        c_addr, provider,
-    );
+    let contract = TokenQueryContractInstance::new(c_addr, provider);
 
     let res = contract
         .getBatchNftInfo(collection, U256::from(offset), U256::from(limit))
