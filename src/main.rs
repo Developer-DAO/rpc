@@ -3,7 +3,10 @@ use crate::middleware::{
 };
 use crate::routes::payment::{cancel, downgrade, upgrade};
 use crate::routes::relayer::websockets::ws_handler;
-use crate::routes::token_queries::{aggregate_balances, aggregate_single_token_bals, aggregate_token_bals_for_user, get_batch_nft_info};
+use crate::routes::token_queries::{
+    aggregate_balances, aggregate_single_token_bals, aggregate_token_bals_for_user,
+    get_batch_nft_info,
+};
 use crate::routes::types::{EmailLogin, JWTKey};
 use crate::routes::{
     activate::activate_account,
@@ -54,22 +57,46 @@ async fn main() {
         .with_target(false)
         .init();
 
+    let origin = if cfg!(feature = "dev") {
+        "http://localhost:5173"
+    } else {
+        "https://cloud.developerdao.com"
+    };
+
     let cors_api = CorsLayer::new()
         .allow_credentials(true)
-        .allow_origin("https://cloud.developerdao.com".parse::<HeaderValue>().unwrap())
+        .allow_origin(origin.parse::<HeaderValue>().unwrap())
         .allow_methods([Method::GET, Method::POST, Method::DELETE])
         .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION, header::COOKIE]);
 
+    #[cfg(feature = "dev")]
+    let relayer = Router::new()
+        .route("/rpc/{chain}/{api_key}", post(route_call))
+        .route("/ws/{chain}/{api_key}", axum::routing::any(ws_handler));
+
+    #[cfg(not(feature = "dev"))]
     let relayer = Router::new()
         .route("/rpc/{chain}/{api_key}", post(route_call))
         .route("/ws/{chain}/{api_key}", axum::routing::any(ws_handler))
         .route_layer(from_fn(validate_subscription_and_update_user_calls));
 
     let token_queries = Router::new()
-        .route("/v1/tokens/balances/{chain}/{api_key}", get(aggregate_balances))
-        .route("/v1/tokens/single_token_balances/{chain}/{api_key}", get(aggregate_single_token_bals))
-        .route("/v1/tokens/many_token_balances/{chain}/{api_key}", get(aggregate_token_bals_for_user))
-        .route("/v1/nfts/ownership/{chain}/{api_key}", get(get_batch_nft_info))
+        .route(
+            "/v1/tokens/balances/{chain}/{api_key}",
+            get(aggregate_balances),
+        )
+        .route(
+            "/v1/tokens/single_token_balances/{chain}/{api_key}",
+            get(aggregate_single_token_bals),
+        )
+        .route(
+            "/v1/tokens/many_token_balances/{chain}/{api_key}",
+            get(aggregate_token_bals_for_user),
+        )
+        .route(
+            "/v1/nfts/ownership/{chain}/{api_key}",
+            get(get_batch_nft_info),
+        )
         .route_layer(from_fn(validate_subscription_and_update_user_calls));
 
     let api_keys = Router::new()
