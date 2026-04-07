@@ -380,7 +380,7 @@ pub async fn process_ethereum_payment(
     let hash = hex::decode(&payload.hash)?;
     let mut fixed = [0u8; 32];
     fixed.copy_from_slice(&hash);
-
+    
     #[allow(clippy::needless_borrow)]
     let eth = reqwest::Url::parse(&_endpoint).unwrap();
     let provider = ProviderBuilder::new().connect_http(eth);

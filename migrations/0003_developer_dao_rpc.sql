@@ -1,0 +1,2 @@
+ALTER TABLE Customers ADD COLUMN suppression_list BOOL NOT NULL DEFAULT FALSE;
+ALTER TABLE Customers ADD COLUMN marketing_email_consent BOOL NOT NULL DEFAULT FALSE;

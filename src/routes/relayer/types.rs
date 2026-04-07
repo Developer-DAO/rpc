@@ -1,6 +1,7 @@
 use http::{HeaderValue, header::CONTENT_TYPE};
 use axum::body::{Body, Bytes};
 use reqwest::Client;
+use serde::{Deserialize, Serialize};
 use std::{
     fmt::{self, Display, Formatter},
     future::Future,
@@ -28,7 +29,7 @@ impl From<PoktChains> for HeaderValue {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum PoktChains {
     #[cfg(any(test, feature = "dev"))]
     Anvil,

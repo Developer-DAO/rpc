@@ -16,7 +16,6 @@ pub struct KeygenLimit {
     count: Option<i64>,
 }
 
-#[axum::debug_handler]
 pub async fn generate_api_keys(
     Extension(jwt): Extension<JWTClaims<Claims<'static>>>,
 ) -> Result<impl IntoResponse, ApiKeyError> {
