@@ -55,6 +55,7 @@ jobs:
                   SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
                   SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
                   JWT_KEY: ${{ secrets.JWT_KEY }}
+                  D_D_CLOUD_API_KEY: ${{ secrets.D_D_CLOUD_API_KEY }}
               run: cargo test --workspace ${{ matrix.flags }}
 
     clippy:
