@@ -96,8 +96,7 @@ async fn main() {
         .route(
             "/v1/nfts/ownership/{chain}/{api_key}",
             get(get_batch_nft_info),
-        )
-        .route_layer(from_fn(validate_subscription_and_update_user_calls));
+        );
 
     let api_keys = Router::new()
         .route("/api/keys", get(get_all_api_keys).post(generate_api_keys))

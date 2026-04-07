@@ -13,7 +13,6 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::routes::{
-    payment::D_D_CLOUD_API_KEY,
     relayer::types::PoktChains,
     token_queries::TokenQueryContract::{TokenBalanceQuery, TokenQueryContractInstance},
 };
@@ -38,14 +37,6 @@ static TOKEN_QUERY_UTIL_DEPLOYMENTS: std::sync::LazyLock<
         PoktChains::ArbOne,
         address!("2791Bca1f2de4661ED88A30C99A7a9449Aa84174"),
     );
-    // map.insert(
-    //     PoktChains::Op,
-    //     address!("0b2C639c533813f4Aa9D7837CAf62653d097Ff85"),
-    // );
-    // map.insert(
-    //     PoktChains::Bsc,
-    //     address!("0b2C639c533813f4Aa9D7837CAf62653d097Ff85"),
-    // );
     map
 });
 
@@ -81,17 +72,21 @@ sol! {
 
 // Many tokens, many users
 pub async fn aggregate_balances(
-    Path((chain, _)): Path<(PoktChains, String)>,
+    Path((chain, api_key)): Path<(PoktChains, String)>,
     Json(payload): Json<Vec<TokenBalanceQuery>>,
 ) -> Result<impl IntoResponse, QueryError> {
     if payload.len() > 1000 {
         Err(QueryError::ERC20QueryLimit)?
     }
 
-    let endpoint: String = format!(
-        "https://api.cloud.developerdao.com/rpc/{}/{}",
-        chain, *D_D_CLOUD_API_KEY
-    );
+    if matches!(
+        chain,
+        PoktChains::Op | PoktChains::Bsc | PoktChains::Sui | PoktChains::Solana
+    ) {
+        return Err(QueryError::ChainError)?;
+    }
+
+    let endpoint: String = format!("https://api.cloud.developerdao.com/rpc/{chain}/{api_key}");
     let eth = reqwest::Url::parse(&endpoint)?;
     let provider = ProviderBuilder::new().connect_http(eth);
     let c_addr = *TOKEN_QUERY_UTIL_DEPLOYMENTS
@@ -106,18 +101,23 @@ pub async fn aggregate_balances(
 
 // one token, many users
 pub async fn aggregate_token_bals_for_user(
-    Path((chain, _)): Path<(PoktChains, String)>,
+    Path((chain, api_key)): Path<(PoktChains, String)>,
     Query((address, tokens)): Query<(Address, Vec<Address>)>,
 ) -> Result<impl IntoResponse, QueryError> {
     if tokens.len() > 1000 {
         Err(QueryError::ERC20QueryLimit)?
     }
 
-    let endpoint: String = format!(
-        "https://api.cloud.developerdao.com/rpc/{}/{}",
-        chain, *D_D_CLOUD_API_KEY
-    );
+    if matches!(
+        chain,
+        PoktChains::Op | PoktChains::Bsc | PoktChains::Sui | PoktChains::Solana
+    ) {
+        return Err(QueryError::ChainError)?;
+    }
+
+    let endpoint: String = format!("https://api.cloud.developerdao.com/rpc/{chain}/{api_key}");
     let eth = reqwest::Url::parse(&endpoint)?;
+
     let provider = ProviderBuilder::new().connect_http(eth);
     let contract = TokenQueryContractInstance::new(
         address!("0x96a7B30FD0B97BfF5bEdB343049b378011Cc62fd"),
@@ -133,17 +133,21 @@ pub async fn aggregate_token_bals_for_user(
 
 // many users, one token
 pub async fn aggregate_single_token_bals(
-    Path((chain, _)): Path<(PoktChains, String)>,
+    Path((chain, api_key)): Path<(PoktChains, String)>,
     Query((token_address, users)): Query<(Address, Vec<Address>)>,
 ) -> Result<impl IntoResponse, QueryError> {
     if users.len() > 1000 {
         Err(QueryError::ERC20QueryLimit)?
     }
 
-    let endpoint: String = format!(
-        "https://api.cloud.developerdao.com/rpc/{}/{}",
-        chain, *D_D_CLOUD_API_KEY
-    );
+    if matches!(
+        chain,
+        PoktChains::Op | PoktChains::Bsc | PoktChains::Sui | PoktChains::Solana
+    ) {
+        return Err(QueryError::ChainError)?;
+    }
+
+    let endpoint: String = format!("https://api.cloud.developerdao.com/rpc/{chain}/{api_key}");
     let eth = reqwest::Url::parse(&endpoint)?;
     let provider = ProviderBuilder::new().connect_http(eth);
     let c_addr = *TOKEN_QUERY_UTIL_DEPLOYMENTS
@@ -159,17 +163,21 @@ pub async fn aggregate_single_token_bals(
 }
 
 pub async fn get_batch_nft_info(
-    Path((chain, _)): Path<(PoktChains, String)>,
+    Path((chain, api_key)): Path<(PoktChains, String)>,
     Query((collection, offset, limit)): Query<(Address, u16, u16)>,
 ) -> Result<impl IntoResponse, QueryError> {
     if limit > 10000 {
         Err(QueryError::NFTQueryLimit)?
     }
 
-    let endpoint: String = format!(
-        "https://api.cloud.developerdao.com/rpc/{}/{}",
-        chain, *D_D_CLOUD_API_KEY
-    );
+    if matches!(
+        chain,
+        PoktChains::Op | PoktChains::Bsc | PoktChains::Sui | PoktChains::Solana
+    ) {
+        return Err(QueryError::ChainError)?;
+    }
+
+    let endpoint: String = format!("https://api.cloud.developerdao.com/rpc/{chain}/{api_key}");
     let eth = reqwest::Url::parse(&endpoint)?;
     let provider = ProviderBuilder::new().connect_http(eth);
     let c_addr = *TOKEN_QUERY_UTIL_DEPLOYMENTS
@@ -211,6 +219,8 @@ impl IntoResponse for QueryError {
 
 #[cfg(test)]
 pub mod test {
+
+    use crate::routes::payment::D_D_CLOUD_API_KEY;
 
     pub use super::*;
     #[tokio::test]
