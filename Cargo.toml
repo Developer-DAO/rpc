@@ -16,7 +16,7 @@ openssl = {version = "0.10.72", features = ["vendored"]}
 rand = { version = "0.9.2", features = ["std_rng", "os_rng"] }
 secp256k1 = {version = "0.31.1", features = ["rand", "global-context"]}
 serde = {version = "1.0.195", features = ["derive"]}
-siwe = { git = "https://github.com/crypdoughdoteth/siwe-rs", rev = "407f2e917185bc88ae70c65a5e4f92acf015779b", features = ["alloy", "serde"] }
+siwe = { git = "https://github.com/futex-labs/siwe", rev = "1459e6ab72932bfdba79f4f950000cedebf86496", features = ["alloy", "serde"] }
 sqlx = {version = "0.8", features = ["postgres", "macros", "runtime-tokio", "tls-rustls", "time", "uuid"]}
 time = {version = "0.3.36" , features = ["serde"]}
 tokio = {version = "1.47.1", features = ["rt-multi-thread", "macros"]}
@@ -24,12 +24,10 @@ tokio-test = "0.4.3"
 tower-http = {version = "0.5.1", features = ["cors"]}
 tracing = "0.1.40"
 tracing-subscriber = "0.3.18"
-alloy = {version = "1.0", features = ["node-bindings", "network", "rpc-types"]}
+alloy = {version = "2.0", features = ["node-bindings", "network", "rpc-types"]}
 thiserror = "1.0.63"
 mimalloc = "0.1.45"
 url = "2.5.8"
-hyper = "1.6.0"
-hyper-util = { version = "0.1", features = ["full"] }
 reqwest = { version = "0.12.24", features = ["json", "rustls-tls", "cookies", "stream"] }
 http-body-util = "0.1"
 serde_json = "1.0.140"

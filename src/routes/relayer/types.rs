@@ -1,5 +1,5 @@
-use http::{HeaderValue, header::CONTENT_TYPE};
 use axum::body::{Body, Bytes};
+use http::{HeaderValue, header::CONTENT_TYPE};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -17,10 +17,7 @@ pub static GATEWAY_ENDPOINT: LazyLock<&'static str> = LazyLock::new(|| {
 });
 
 pub trait Relayer {
-    fn relay_transaction(
-        &self,
-        body: Bytes,
-    ) -> impl Future<Output = Result<Body, RelayErrors>>;
+    fn relay_transaction(&self, body: Bytes) -> impl Future<Output = Result<Body, RelayErrors>>;
 }
 
 impl From<PoktChains> for HeaderValue {

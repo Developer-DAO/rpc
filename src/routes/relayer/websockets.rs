@@ -1,5 +1,4 @@
 use crate::routes::relayer::types::PoktChains;
-use axum::body::Bytes;
 use axum::extract::ws::{CloseFrame, Message, Utf8Bytes, WebSocket};
 use axum::extract::{Path, WebSocketUpgrade};
 use axum::response::IntoResponse;
@@ -9,6 +8,7 @@ use http::StatusCode;
 use thiserror::Error;
 use tokio::{select, sync::mpsc};
 use tokio_tungstenite::tungstenite::ClientRequestBuilder;
+use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 use tokio_tungstenite::{
     connect_async_tls_with_config, tungstenite::Message as TungsteniteMessage,
 };
@@ -24,12 +24,14 @@ pub async fn ws_handler(
         .parse::<PoktChains>()
         .map_err(|_| WsError::InvalidRoute)?;
 
+    let ws = ws.max_message_size(1024 * 1024);
     let res = ws.on_upgrade(async move |user_socket| {
-        let (user_tx, mut user_rv) = user_socket.split();
+        let (user_tx, mut user_rv): (SplitSink<WebSocket, Message>, SplitStream<WebSocket>) =
+            user_socket.split();
         // CONSIDERATION: timeout await call
         let subscription = user_rv.next().await;
         let Some(Ok(Message::Text(sub_info))) = subscription else {
-            // handle error case
+            warn!("Unexpected message received.");
             return;
         };
         let (shutdown_tx, shutdown_rx): (
@@ -53,17 +55,31 @@ pub async fn handle_user_msgs(
 ) {
     tokio::spawn(async move {
         // max wait time?
-        select! {
-            Some(Command::Kill) = cleanup_rx.recv() => {},
-            Some(Ok(Message::Close(_close_frame))) = user_rv.next() => {
-                shutdown_tx.send(Command::Kill).unwrap();
-            }
-            // prevents a panic
-            else => {
-                debug!("User channel and ws channel dropped");
+        loop {
+            select! {
+                Some(Command::Kill) = cleanup_rx.recv() => {
+                    warn!("Exiting user msg handler");
+                    return
+                },
+                Some(Ok(msg)) = user_rv.next() => {
+                    match msg {
+                        Message::Text(_utf8_bytes) => {},
+                        Message::Binary(_bytes) => {},
+                        Message::Ping(_bytes) => shutdown_tx.send(Command::Pong).unwrap(),
+                        Message::Pong(_bytes) => shutdown_tx.send(Command::Ping).unwrap(),
+                        Message::Close(_close_frame) => {
+                            shutdown_tx.send(Command::Kill).unwrap();
+                            return;
+                        },
+                    }
+                }
+                // prevents a panic
+                else => {
+                    debug!("User channel and ws channel dropped");
+                    return;
+                }
             }
         }
-        warn!("Exiting user msg handler");
     });
 }
 
@@ -76,24 +92,25 @@ pub async fn handle_ws_conn(
     mut user_tx: SplitSink<WebSocket, Message>,
 ) {
     tokio::spawn(async move {
-        let mut reconnect_count: u8 = 0;
-        'reconnect: loop {
-            if reconnect_count >= 3 {
-                cleanup_tx.send(Command::Kill).unwrap();
-                break 'reconnect;
-            }
-            let request = ClientRequestBuilder::new("ws://localhost:3069/v1".parse().unwrap())
-                .with_header("Target-Service-Id", String::from(path.id()));
+        'node_reconnect: loop {
+            let request = if cfg!(feature = "dev") {
+                let url = dotenvy::var("SEPOLIA_WS").unwrap().parse().unwrap();
+                ClientRequestBuilder::new(url)
+            } else {
+                ClientRequestBuilder::new("ws://localhost:3069/v1".parse().unwrap())
+                    .with_header("Target-Service-Id", String::from(path.id()))
+            };
 
+            let config = WebSocketConfig::default().max_message_size(Some(16 * 1024 * 1024));
             let (node_socket, _res) =
-                match connect_async_tls_with_config(request, None, false, None).await {
+                match connect_async_tls_with_config(request, Some(config), false, None).await {
                     Ok((node_socket, _res)) => (node_socket, _res),
                     Err(e) => {
                         tracing::error!("Failed to connect to websocket: {e}");
                         if let Err(e) = cleanup_tx.send(Command::Kill) {
                             debug!("Failed to clean up user channel: {e}");
                         }
-                        break 'reconnect;
+                        break 'node_reconnect;
                     }
                 };
 
@@ -106,47 +123,51 @@ pub async fn handle_ws_conn(
                 .await
                 .unwrap();
 
-            'ws_bridge: loop {
+            loop {
                 select! {
-                    Some(Command::Kill) = shutdown_rx.recv() => {
-                        // send close frame to user ws
-                        user_tx.send(Message::Close(None)).await.unwrap();
-                    }
-                    Some(Ok(msg)) = node_rv.next() => {
-                        if let Some(m) = convert(msg) {
-                            match m {
-                                Message::Text(_) => {
-                                    if let Err(_e) = user_tx.send(m).await {
-                                        // User WS is disconnected
-                                        node_tx.send(TungsteniteMessage::Close(None)).await.unwrap();
-                                        cleanup_tx.send(Command::Kill).unwrap();
-                                        warn!("Failed to relay msg to user from node");
-                                        break 'reconnect;
+                        Some(cmd) = shutdown_rx.recv() => {
+                            match cmd {
+                                // graceful closure
+                                Command::Kill => {
+                                    let closure = axum::extract::ws::Message::Close(
+                                    Some(
+                                        axum::extract::ws::CloseFrame {
+                                            code: 1000,
+                                            reason: axum::extract::ws::Utf8Bytes::from_static("Graceful shutdown (user sent close frame)")
+                                        }
+                                    ));
+                                    user_tx.send(closure).await.unwrap();
+                                    info!("Graceful shutdown");
+                                },
+                                Command::Pong => user_tx.send(axum::extract::ws::Message::Ping(axum::body::Bytes::new())).await.unwrap(),
+                                Command::Ping => user_tx.send(axum::extract::ws::Message::Pong(axum::body::Bytes::new())).await.unwrap(),
+                            }
+                        }
+                        Some(Ok(msg)) = node_rv.next() => {
+                            if let Some(m) = convert(msg) {
+                                match m {
+                                    Message::Text(_) => {
+                                        if let Err(e) = user_tx.send(m).await {
+                                            node_tx.send(TungsteniteMessage::Close(None)).await.unwrap();
+                                            cleanup_tx.send(Command::Kill).unwrap();
+                                            warn!("Failed to relay msg to user from node: {e}");
+                                            return;
+                                        }
                                     }
-                                }
-                                Message::Close(_close_frame) => {
-                                    // log node info and close frame leading to ws closure
-                                    // handle close of Node's WS connection
-                                    let ping = axum::extract::ws::Message::Ping(Bytes::new());
-                                    if let Err(_e) = user_tx.send(ping).await {
-                                        // do not reestablish connection and kill loop
-                                        // log user info and conditions leading to ws closure
-                                        cleanup_tx.send(Command::Kill).unwrap();
-                                        warn!("Closing user ws connection...");
-                                        break 'reconnect;
+                                    Message::Close(_close_frame) => {
+                                        // log node info and close frame leading to ws closure
+                                        // handle close of Node's WS connection
+                                        warn!("Lost connection to node. Reconnecting ...");
+                                        continue 'node_reconnect;
                                     }
-                                    reconnect_count += 1;
-                                    warn!("Reconnecting ...");
-                                    break 'ws_bridge;
-                                }
-                                _ => {}
+                                    _ => {}
                             }
                         }
                     }
                 }
             }
         }
-        warn!("Exiting connection bridge");
+        //        warn!("Exiting connection bridge");
     });
 }
 
@@ -190,4 +211,6 @@ impl IntoResponse for WsError {
 
 pub enum Command {
     Kill,
+    Pong,
+    Ping,
 }

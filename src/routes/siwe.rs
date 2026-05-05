@@ -70,7 +70,9 @@ pub async fn siwe_add_wallet(
 }
 
 #[tracing::instrument]
-pub async fn get_siwe_nonce(Path(addr): Path<[Address; 1]>) -> Result<impl IntoResponse, SiweError> {
+pub async fn get_siwe_nonce(
+    Path(addr): Path<[Address; 1]>,
+) -> Result<impl IntoResponse, SiweError> {
     let nonce = generate_nonce();
     let addr = addr.first().ok_or_else(|| SiweError::SiweEmailError)?;
     let mut tx = RELATIONAL_DATABASE.get().unwrap().begin().await?;
@@ -88,7 +90,7 @@ pub async fn get_siwe_nonce(Path(addr): Path<[Address; 1]>) -> Result<impl IntoR
 #[tracing::instrument]
 pub async fn jwt_get_siwe_nonce(
     Extension(jwt): Extension<JWTClaims<Claims<'_>>>,
-) ->Result<impl IntoResponse, SiweError> {
+) -> Result<impl IntoResponse, SiweError> {
     let nonce = generate_nonce();
     let mut tx = RELATIONAL_DATABASE.get().unwrap().begin().await?;
     sqlx::query!(
@@ -101,7 +103,6 @@ pub async fn jwt_get_siwe_nonce(
     tx.commit().await?;
     Ok((StatusCode::OK, nonce).into_response())
 }
-
 
 #[derive(Debug, Error)]
 pub enum SiweError {

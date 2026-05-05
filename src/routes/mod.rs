@@ -1,5 +1,4 @@
 pub mod activate;
-pub mod token_queries;
 pub mod api_keys;
 pub mod login;
 pub mod payment;
@@ -7,4 +6,5 @@ pub mod recovery;
 pub mod register;
 pub mod relayer;
 pub mod siwe;
+pub mod token_queries;
 pub mod types;

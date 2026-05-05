@@ -21,8 +21,8 @@ use axum::http::StatusCode;
 use axum::{Json, response::IntoResponse};
 use jwt_simple::claims::JWTClaims;
 use serde::{Deserialize, Serialize};
-use sqlx::types::time::OffsetDateTime;
 use sqlx::types::Uuid;
+use sqlx::types::time::OffsetDateTime;
 #[cfg(test)]
 use std::collections::HashMap;
 use std::num::ParseFloatError;
@@ -131,13 +131,12 @@ pub struct Balances {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Upgrade {
-    plan: Plan
+    plan: Plan,
 }
-
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Downgrade {
-    plan: Plan
+    plan: Plan,
 }
 
 #[derive(Deserialize)]
@@ -218,7 +217,7 @@ pub async fn get_payments<'a>(
     Ok((StatusCode::OK, serde_json::to_string(&res)?).into_response())
 }
 
-pub struct Cancel { 
+pub struct Cancel {
     pub id: Uuid,
 }
 
@@ -226,7 +225,6 @@ pub struct Cancel {
 pub async fn cancel(
     Extension(jwt): Extension<JWTClaims<Claims<'_>>>,
 ) -> Result<impl IntoResponse, PaymentError> {
-
     let mut tx = RELATIONAL_DATABASE.get().unwrap().begin().await?;
 
     sqlx::query!(
@@ -239,8 +237,8 @@ pub async fn cancel(
         "#,
         jwt.custom.email.as_str()
     )
-        .execute(&mut *tx)
-        .await?;
+    .execute(&mut *tx)
+    .await?;
 
     tx.commit().await?;
 
@@ -253,7 +251,7 @@ pub struct RpcPlan {
     pub plan: Plan,
     pub created: OffsetDateTime,
     pub expires: OffsetDateTime,
-    pub downgradeto: Option<Plan>
+    pub downgradeto: Option<Plan>,
 }
 
 /// Downgrades the service tier for active plan next cycle
@@ -273,13 +271,13 @@ pub async fn downgrade(
         .await?;
 
     if payload.plan >= plan.plan || matches!(plan.plan, Plan::Free) {
-        return Ok((StatusCode::FORBIDDEN, "Not a downgrade").into_response())
+        return Ok((StatusCode::FORBIDDEN, "Not a downgrade").into_response());
     }
 
     // update tier for next cycle
-    sqlx::query!( 
+    sqlx::query!(
         r#"UPDATE RpcPlans set downgradeTo = $1 
-        WHERE $2 = email"#,  
+        WHERE $2 = email"#,
         payload.plan as Plan,
         jwt.custom.email.as_str()
     )
@@ -290,7 +288,6 @@ pub async fn downgrade(
 
     Ok((StatusCode::OK, "Downgrade successful").into_response())
 }
-
 
 pub async fn upgrade(
     Extension(jwt): Extension<JWTClaims<Claims<'_>>>,
@@ -308,11 +305,11 @@ pub async fn upgrade(
         .await?;
 
     if payload.plan <= plan.plan {
-        return Ok((StatusCode::FORBIDDEN, "Not an upgrade").into_response())
+        return Ok((StatusCode::FORBIDDEN, "Not an upgrade").into_response());
     }
 
     // cost of new plan - cost of old plan
-    let total_cost = (payload.plan.get_cost() - plan.plan.get_cost()) as i64  * 100;
+    let total_cost = (payload.plan.get_cost() - plan.plan.get_cost()) as i64 * 100;
 
     // deduct balance from account
     let mut tx = RELATIONAL_DATABASE.get().unwrap().begin().await?;
@@ -326,14 +323,17 @@ pub async fn upgrade(
 
     if let Err(e) = r {
         match e.as_database_error() {
-            Some(db) => { 
+            Some(db) => {
                 // there is a check on user balances that asserts a non-zero balance, if this
                 // check fails then the DB will not allow the write
-                // allows for a fairly optimistic system & cuts out 1 round trip 
+                // allows for a fairly optimistic system & cuts out 1 round trip
                 if db.is_check_violation() {
-                    return Ok((StatusCode::PAYMENT_REQUIRED, "Insufficient funds for plan").into_response());
+                    return Ok(
+                        (StatusCode::PAYMENT_REQUIRED, "Insufficient funds for plan")
+                            .into_response(),
+                    );
                 }
-            },
+            }
             None => Err(e)?,
         }
     }
@@ -353,9 +353,8 @@ pub async fn upgrade(
     Ok((StatusCode::OK, "Successfully applied payment").into_response())
 }
 
-pub static D_D_CLOUD_API_KEY: LazyLock<&'static str> = LazyLock::new(|| {
-    dotenvy::var("D_D_CLOUD_API_KEY").unwrap().leak()
-});
+pub static D_D_CLOUD_API_KEY: LazyLock<&'static str> =
+    LazyLock::new(|| dotenvy::var("D_D_CLOUD_API_KEY").unwrap().leak());
 
 #[tracing::instrument]
 pub async fn process_ethereum_payment(
@@ -364,7 +363,11 @@ pub async fn process_ethereum_payment(
 ) -> Result<impl IntoResponse, PaymentError> {
     #[cfg(not(test))]
     #[cfg(not(feature = "dev"))]
-    let _endpoint: String = format!("https://api.cloud.developerdao.com/rpc/{}/{}", payload.chain.pokt_id(), *D_D_CLOUD_API_KEY);
+    let _endpoint: String = format!(
+        "https://api.cloud.developerdao.com/rpc/{}/{}",
+        payload.chain.pokt_id(),
+        *D_D_CLOUD_API_KEY
+    );
 
     #[cfg(test)]
     let _endpoint: &'static str = TESTING_ENDPOINT.get().unwrap();
@@ -380,24 +383,22 @@ pub async fn process_ethereum_payment(
     let hash = hex::decode(&payload.hash)?;
     let mut fixed = [0u8; 32];
     fixed.copy_from_slice(&hash);
-    
+
     #[allow(clippy::needless_borrow)]
     let eth = reqwest::Url::parse(&_endpoint).unwrap();
     let provider = ProviderBuilder::new().connect_http(eth);
 
     let p1 = provider.clone();
     let res = tokio::spawn(async move {
-            p1 
-                .get_transaction_by_hash(FixedBytes::from(&fixed))
-                .await?
-                .ok_or_else(|| PaymentError::TxNotFound)
-        });
-    
+        p1.get_transaction_by_hash(FixedBytes::from(&fixed))
+            .await?
+            .ok_or_else(|| PaymentError::TxNotFound)
+    });
+
     let p2 = provider.clone();
     let receipt: tokio::task::JoinHandle<Result<TransactionReceipt, PaymentError>> = {
         tokio::spawn(async move {
-            p2
-                .get_transaction_receipt(FixedBytes::from(&fixed))
+            p2.get_transaction_receipt(FixedBytes::from(&fixed))
                 .await?
                 .ok_or_else(|| PaymentError::TxNotFound)
         })
@@ -474,7 +475,10 @@ pub async fn process_ethereum_payment(
             };
 
             #[cfg(not(feature = "dev"))]
-            let _token_address = res.inner.to().ok_or_else(|| PaymentError::UnsupportedToken)?;
+            let _token_address = res
+                .inner
+                .to()
+                .ok_or_else(|| PaymentError::UnsupportedToken)?;
 
             let (amount, to) = match decoded {
                 Transfer::Transfer(tx) => (tx.amount, tx.to),
@@ -599,15 +603,20 @@ async fn insert_payment(payment: &Payments<'_>) -> Result<(), PaymentError> {
     Ok(())
 }
 
-async fn credit_account(email: &EmailAddress<'_>, mut amount: i64, plan: Option<Plan>) -> Result<(), PaymentError> {
+async fn credit_account(
+    email: &EmailAddress<'_>,
+    mut amount: i64,
+    plan: Option<Plan>,
+) -> Result<(), PaymentError> {
     // only updates account balance based on transaction
     let db_connection = RELATIONAL_DATABASE.get().unwrap();
     let mut transaction = db_connection.begin().await?;
 
-    if let Some(plan) = plan && plan.get_cost() <= amount as f64 / 100.0
+    if let Some(plan) = plan
+        && plan.get_cost() <= amount as f64 / 100.0
     {
         amount -= (plan.get_cost() * 100.0) as i64;
-        
+
         sqlx::query!(
             "UPDATE RpcPlans SET plan = $1 where email = $2",
             plan as Plan,
@@ -615,7 +624,6 @@ async fn credit_account(email: &EmailAddress<'_>, mut amount: i64, plan: Option<
         )
         .execute(&mut *transaction)
         .await?;
-
     }
 
     sqlx::query!(
@@ -649,7 +657,7 @@ pub enum PaymentError {
     UnitsError(#[from] UnitsError),
     #[error(
         "Failed to decode the transaction's calldata into ERC20::Transfer or ERC20::TransferFrom"
-)]
+    )]
     AbiDecodingError,
     #[error("No destination for tx")]
     NoDestination,
@@ -725,9 +733,7 @@ mod tests {
         let wallet = EthereumWallet::from(signer.clone());
         let rpc_url = anvil.endpoint().parse().unwrap();
         TESTING_ENDPOINT.get_or_init(|| anvil.endpoint().leak());
-        let provider = ProviderBuilder::new()
-            .wallet(wallet)
-            .connect_http(rpc_url);
+        let provider = ProviderBuilder::new().wallet(wallet).connect_http(rpc_url);
 
         // let eth_tx = provider
         //     .transaction_request()
@@ -904,7 +910,7 @@ mod tests {
         sqlx::query!(
             "DELETE FROM RpcPlans WHERE email = $1",
             "cloud@developerdao.com"
-        ) 
+        )
         .execute(RELATIONAL_DATABASE.get().unwrap())
         .await
         .unwrap();
