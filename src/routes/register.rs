@@ -11,7 +11,7 @@ use lettre::{
     message::{Mailbox, header::ContentType},
     transport::smtp::{self, authentication::Credentials},
 };
-use rand::{Rng, rngs::ThreadRng};
+use rand::{rng, RngExt};
 use siwe::generate_nonce;
 use thiserror::Error;
 use tokio::task::JoinError;
@@ -105,7 +105,7 @@ pub async fn register_user(
 
 #[inline]
 pub fn generate_verification_code(size: usize) -> String {
-    ThreadRng::default()
+    rng()
         .random_iter()
         .take(size)
         // 48-57 are the ASCII characters representing the digits 0..9

@@ -1,13 +1,12 @@
 use super::types::Claims;
-use crate::database::types::RELATIONAL_DATABASE;
+use crate::{database::types::RELATIONAL_DATABASE};
 use axum::{
     extract::{Extension, Path},
     http::StatusCode,
     response::IntoResponse,
 };
 use jwt_simple::claims::JWTClaims;
-use rand::rngs::ThreadRng;
-use secp256k1::generate_keypair;
+use rand::{RngExt, rng};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -33,12 +32,7 @@ pub async fn generate_api_keys(
         Err(ApiKeyError::RateLimit)?
     }
 
-    let key_string = {
-        let mut rand = ThreadRng::default();
-        let (secret_key, _) = generate_keypair(&mut rand);
-        hex::encode(secret_key.secret_bytes())
-    };
-
+    let key_string = generate_api_key(64);
     sqlx::query!(
         "INSERT INTO Api (customerEmail, apiKey) VALUES ($1, $2)",
         jwt.custom.email.as_str(),
@@ -99,6 +93,19 @@ impl IntoResponse for ApiKeyError {
         )
             .into_response()
     }
+}
+
+#[inline]
+pub fn generate_api_key(size: usize) -> String {
+    rng()
+        .random_iter()
+        .take(size)
+        // 32-126 are the printable ASCII characters
+        .map(|e: u8| (e % 94) + 32)
+        .fold(String::with_capacity(size), |mut acc, e| {
+            acc.push(e as char);
+            acc
+        })
 }
 
 // limits for API key generation to avoid abuse
