@@ -76,7 +76,7 @@ impl PoktChains {
 
 impl Relayer for PoktChains {
     async fn relay_transaction(&self, body: Bytes) -> Result<Body, RelayErrors> {
-        if cfg!(test) {
+        if cfg!(test) || cfg!(feature = "dev") {
             let provider = dotenvy::var("SEPOLIA_PROVIDER").expect("SEPOLIA_PROVIDER not found");
             let byte_stream = Client::new()
                 .post(&provider)
@@ -107,17 +107,17 @@ impl Relayer for PoktChains {
 impl FromStr for PoktChains {
     type Err = RelayErrors;
     fn from_str(value: &str) -> Result<Self, Self::Err> {
-        match value.to_lowercase().as_ref() {
-            "arb-one" => Ok(PoktChains::ArbOne),
-            "base" => Ok(PoktChains::Base),
-            "bsc" => Ok(PoktChains::Bsc),
-            "eth" => Ok(PoktChains::Eth),
-            "op" => Ok(PoktChains::Op),
-            "poly" => Ok(PoktChains::Poly),
-            "solana" => Ok(PoktChains::Solana),
-            "sui" => Ok(PoktChains::Sui),
+        match value {
+            "arb-one" | "Arb-one" | "Arb-One" => Ok(PoktChains::ArbOne),
+            "base" | "Base" => Ok(PoktChains::Base),
+            "bsc" | "Bsc" => Ok(PoktChains::Bsc),
+            "eth" | "Eth" => Ok(PoktChains::Eth),
+            "op" | "Op" => Ok(PoktChains::Op),
+            "poly" | "Poly" => Ok(PoktChains::Poly),
+            "solana" | "Solana" => Ok(PoktChains::Solana),
+            "sui" | "Sui" => Ok(PoktChains::Sui),
             #[cfg(any(test, feature = "dev"))]
-            "anvil" => Ok(PoktChains::Anvil),
+            "anvil" | "Anvil" => Ok(PoktChains::Anvil),
             _ => Err(RelayErrors::PoktChainIdParsingError),
         }
     }

@@ -11,6 +11,7 @@ use tokio_tungstenite::tungstenite::ClientRequestBuilder;
 use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 use tokio_tungstenite::{
     connect_async_tls_with_config, tungstenite::Message as TungsteniteMessage,
+    tungstenite::Utf8Bytes as TungsteniteUtf8,
 };
 use tracing::{debug, info, warn};
 
@@ -63,7 +64,7 @@ pub async fn handle_user_msgs(
                 },
                 Some(Ok(msg)) = user_rv.next() => {
                     match msg {
-                        Message::Text(_utf8_bytes) => {},
+                        Message::Text(utf8_bytes) => shutdown_tx.send(Command::Message(utf8_bytes)).unwrap(),
                         Message::Binary(_bytes) => {},
                         Message::Ping(_bytes) => shutdown_tx.send(Command::Pong).unwrap(),
                         Message::Pong(_bytes) => shutdown_tx.send(Command::Ping).unwrap(),
@@ -141,6 +142,13 @@ pub async fn handle_ws_conn(
                                 },
                                 Command::Pong => user_tx.send(axum::extract::ws::Message::Ping(axum::body::Bytes::new())).await.unwrap(),
                                 Command::Ping => user_tx.send(axum::extract::ws::Message::Pong(axum::body::Bytes::new())).await.unwrap(),
+                                Command::Message(utf8_bytes) => {
+                                    let utf8 = unsafe {
+                                        TungsteniteUtf8::from_bytes_unchecked(utf8_bytes.into())
+                                    };
+
+                                    node_tx.send(TungsteniteMessage::Text(utf8)).await.unwrap();
+                                 },
                             }
                         }
                         Some(Ok(msg)) = node_rv.next() => {
@@ -213,4 +221,5 @@ pub enum Command {
     Kill,
     Pong,
     Ping,
+    Message(Utf8Bytes),
 }

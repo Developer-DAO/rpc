@@ -11,7 +11,7 @@ use lettre::{
     message::{Mailbox, header::ContentType},
     transport::smtp::{self, authentication::Credentials},
 };
-use rand::{rng, RngExt};
+use rand::{RngExt, rng};
 use siwe::generate_nonce;
 use thiserror::Error;
 use tokio::task::JoinError;

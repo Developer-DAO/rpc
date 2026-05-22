@@ -1,5 +1,5 @@
 use super::types::Claims;
-use crate::{database::types::RELATIONAL_DATABASE};
+use crate::database::types::RELATIONAL_DATABASE;
 use axum::{
     extract::{Extension, Path},
     http::StatusCode,

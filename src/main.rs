@@ -1,6 +1,7 @@
-use crate::middleware::{
-    jwt_auth::verify_jwt, rpc_service::validate_subscription_and_update_user_calls,
-};
+use crate::middleware::ingress_limits::body_size_limiter;
+use crate::middleware::jwt_auth::verify_jwt;
+#[cfg(not(feature = "dev"))]
+use crate::middleware::rpc_service::validate_subscription_and_update_user_calls;
 use crate::routes::payment::{cancel, downgrade, upgrade};
 use crate::routes::relayer::websockets::ws_handler;
 use crate::routes::token_queries::{
@@ -16,6 +17,7 @@ use crate::routes::{
     register::register_user,
     relayer::router::route_call,
 };
+use axum::extract::DefaultBodyLimit;
 use axum::http::HeaderValue;
 use axum::http::Method;
 use axum::routing::delete;
@@ -27,7 +29,6 @@ use axum::{
     routing::{get, post},
 };
 use database::types::Database;
-// use middleware::rpc_service::{RpcAuthErrors, refill_calls_and_renew_plans};
 use mimalloc::MiMalloc;
 use routes::login::{refresh, user_login_siwe};
 use routes::payment::{get_calls_and_balance, get_payments, process_ethereum_payment};
@@ -69,16 +70,12 @@ async fn main() {
         .allow_methods([Method::GET, Method::POST, Method::DELETE])
         .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION, header::COOKIE]);
 
-    #[cfg(feature = "dev")]
     let relayer = Router::new()
         .route("/rpc/{chain}/{api_key}", post(route_call))
         .route("/ws/{chain}/{api_key}", axum::routing::any(ws_handler));
 
     #[cfg(not(feature = "dev"))]
-    let relayer = Router::new()
-        .route("/rpc/{chain}/{api_key}", post(route_call))
-        .route("/ws/{chain}/{api_key}", axum::routing::any(ws_handler))
-        .route_layer(from_fn(validate_subscription_and_update_user_calls));
+    let relayer = relayer.route_layer(from_fn(validate_subscription_and_update_user_calls));
 
     let token_queries = Router::new()
         .route(
@@ -135,7 +132,9 @@ async fn main() {
         .merge(payments)
         .layer(cors_api)
         .merge(token_queries)
-        .merge(relayer);
+        .merge(relayer)
+        .layer(DefaultBodyLimit::disable())
+        .layer(from_fn(body_size_limiter));
 
     info!("Initialized D_D RPC on 0.0.0.0:3000");
     let listener = TcpListener::bind("0.0.0.0:3000").await.unwrap();

@@ -36,7 +36,7 @@ futures-util = "0.3.31"
 
 [dev-dependencies]
 alloy = {version = "2.0", features = ["node-bindings", "network", "rpc-types", "signer-local"]}
-criterion = { version = "0.5", features = ["async", "async_tokio", "html_reports"] }
+criterion = { version = "0.8", features = ["async", "async_tokio", "html_reports"] }
 
 [[bench]]
 name = "bench"
