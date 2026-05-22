@@ -43,9 +43,9 @@ fn test_relay_pocket(c: &mut Criterion) {
     group.plot_config(plot_config);
 
     let runtime = tokio::runtime::Runtime::new().unwrap();
-    group.bench_function("Pocket Relay Bench", move |b| {
+    group.bench_function("RPC Benchmark", move |b| {
         b.to_async(&runtime).iter_batched(
-            || generate_body(),
+            generate_body,
             async move |data| relay_benchmark(data.0, data.1, data.2).await,
             BatchSize::SmallInput,
         )
