@@ -17,6 +17,7 @@ pub static GATEWAY_ENDPOINT: LazyLock<&'static str> = LazyLock::new(|| {
     )
     .leak()
 });
+pub static PROXY_CLIENT: LazyLock<Client> = LazyLock::new(Client::new);
 
 pub trait Relayer {
     fn relay_transaction(&self, body: Bytes) -> impl Future<Output = Result<Body, RelayErrors>>;
@@ -85,7 +86,7 @@ impl Relayer for PoktChains {
                 self.id(),
                 &api_key
             );
-            let byte_stream = Client::new()
+            let byte_stream = PROXY_CLIENT
                 .post(provider)
                 .header(CONTENT_TYPE, HeaderValue::from_static("application/json"))
                 .body(body)
@@ -96,7 +97,7 @@ impl Relayer for PoktChains {
             let body = Body::from_stream(byte_stream);
             Ok(body)
         } else {
-            let byte_stream = Client::new()
+            let byte_stream = PROXY_CLIENT
                 .post(*GATEWAY_ENDPOINT)
                 .header(CONTENT_TYPE, HeaderValue::from_static("application/json"))
                 .header("target-service-id", self.id())

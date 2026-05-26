@@ -9,8 +9,7 @@ macro_rules! route {
              pub async fn $i(
                 body: Bytes,
             ) -> Result<impl IntoResponse, RouterErrors> {
-                let result = $t.relay_transaction(body).await?;
-                Ok((StatusCode::OK, result))
+                Ok((StatusCode::OK, $t.relay_transaction(body).await?))
             }
         )+
     }
