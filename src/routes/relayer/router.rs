@@ -55,7 +55,7 @@ pub mod test {
         .as_bytes();
 
         let bytes = axum::body::Bytes::from_static(body);
-        let chain = "anvil";
+        let chain = "base";
         let dest = chain.parse::<PoktChains>().unwrap();
         let res = dest.relay_transaction(bytes).await;
         assert!(res.is_ok());

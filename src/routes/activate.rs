@@ -6,7 +6,7 @@ use thiserror::Error;
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ActivationRequest {
     pub email: sstr::Str<256>,
-    pub code: sstr::Str<256>,
+    pub code: sstr::Str<8>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

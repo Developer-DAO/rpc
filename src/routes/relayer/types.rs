@@ -80,9 +80,13 @@ impl Relayer for PoktChains {
     async fn relay_transaction(&self, body: Bytes) -> Result<Body, RelayErrors> {
         if cfg!(test) || cfg!(feature = "dev") {
             let api_key = dotenvy::var("D_D_CLOUD_API_KEY").expect("D_D_CLOUD_API_KEY");
-            let provider = format!("https://api.cloud.developerdao.com/rpc/{}/{}", self.id(), &api_key);
+            let provider = format!(
+                "https://api.cloud.developerdao.com/rpc/{}/{}",
+                self.id(),
+                &api_key
+            );
             let byte_stream = Client::new()
-                .post(&provider)
+                .post(provider)
                 .header(CONTENT_TYPE, HeaderValue::from_static("application/json"))
                 .body(body)
                 .send()
