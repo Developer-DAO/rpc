@@ -8,6 +8,8 @@ use std::{
     str::FromStr,
     sync::LazyLock,
 };
+use thiserror::Error;
+
 pub static GATEWAY_ENDPOINT: LazyLock<&'static str> = LazyLock::new(|| {
     format!(
         "{}/v1",
@@ -77,7 +79,8 @@ impl PoktChains {
 impl Relayer for PoktChains {
     async fn relay_transaction(&self, body: Bytes) -> Result<Body, RelayErrors> {
         if cfg!(test) || cfg!(feature = "dev") {
-            let provider = dotenvy::var("SEPOLIA_PROVIDER").expect("SEPOLIA_PROVIDER not found");
+            let api_key = dotenvy::var("D_D_CLOUD_API_KEY").expect("D_D_CLOUD_API_KEY");
+            let provider = format!("https://api.cloud.developerdao.com/rpc/{}/{}", self.id(), &api_key);
             let byte_stream = Client::new()
                 .post(&provider)
                 .header(CONTENT_TYPE, HeaderValue::from_static("application/json"))
@@ -123,16 +126,11 @@ impl FromStr for PoktChains {
     }
 }
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum RelayErrors {
-    PoktRelayError(reqwest::Error),
+    #[error(transparent)]
+    PoktRelayError(#[from] reqwest::Error),
     PoktChainIdParsingError,
-}
-
-impl From<reqwest::Error> for RelayErrors {
-    fn from(value: reqwest::Error) -> Self {
-        RelayErrors::PoktRelayError(value)
-    }
 }
 
 impl Display for RelayErrors {
@@ -142,15 +140,6 @@ impl Display for RelayErrors {
                 write!(f, "Failed to submit transaction or parse the response")
             }
             RelayErrors::PoktChainIdParsingError => write!(f, "Could not identify chain by id"),
-        }
-    }
-}
-
-impl std::error::Error for RelayErrors {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            RelayErrors::PoktRelayError(e) => Some(e),
-            RelayErrors::PoktChainIdParsingError => None,
         }
     }
 }

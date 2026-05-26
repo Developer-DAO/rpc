@@ -19,13 +19,13 @@ pub struct Siwe {
     pub signature: Vec<u8>,
 }
 
-pub struct Nonce<'a> {
-    nonce: SiweNonce<'a>,
+pub struct Nonce {
+    nonce: SiweNonce,
 }
 
 #[tracing::instrument]
 pub async fn siwe_add_wallet(
-    Extension(jwt): Extension<JWTClaims<Claims<'_>>>,
+    Extension(jwt): Extension<JWTClaims<Claims>>,
     Json(payload): Json<Siwe>,
 ) -> Result<impl IntoResponse, SiweError> {
     let msg: Message = payload.message.parse()?;
@@ -49,7 +49,7 @@ pub async fn siwe_add_wallet(
 
     let verification_opts = VerificationOpts {
         domain: Some(domain.parse().unwrap()),
-        nonce: Some(nonce.to_string()),
+        nonce: Some(nonce.0),
         timestamp: Some(OffsetDateTime::now_utc()),
         rpc_provider: Some(rpc),
     };
@@ -89,7 +89,7 @@ pub async fn get_siwe_nonce(
 
 #[tracing::instrument]
 pub async fn jwt_get_siwe_nonce(
-    Extension(jwt): Extension<JWTClaims<Claims<'_>>>,
+    Extension(jwt): Extension<JWTClaims<Claims>>,
 ) -> Result<impl IntoResponse, SiweError> {
     let nonce = generate_nonce();
     let mut tx = RELATIONAL_DATABASE.get().unwrap().begin().await?;

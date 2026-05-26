@@ -16,7 +16,7 @@ pub struct KeygenLimit {
 }
 
 pub async fn generate_api_keys(
-    Extension(jwt): Extension<JWTClaims<Claims<'static>>>,
+    Extension(jwt): Extension<JWTClaims<Claims>>,
 ) -> Result<impl IntoResponse, ApiKeyError> {
     let keys = sqlx::query_as!(
         KeygenLimit,
@@ -51,7 +51,7 @@ pub struct Keys {
 
 #[tracing::instrument]
 pub async fn get_all_api_keys(
-    Extension(jwt): Extension<JWTClaims<Claims<'_>>>,
+    Extension(jwt): Extension<JWTClaims<Claims>>,
 ) -> Result<impl IntoResponse, ApiKeyError> {
     let keys: Vec<Keys> = sqlx::query_as!(
         Keys,

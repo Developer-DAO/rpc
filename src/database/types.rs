@@ -27,11 +27,11 @@ impl Database {
 }
 
 #[derive(FromRow, Debug)]
-pub struct Customers<'a> {
-    pub email: EmailAddress<'a>,
+pub struct Customers {
+    pub email: EmailAddress,
     pub wallet: Option<String>,
     pub role: Role,
-    pub password: Password<'a>,
+    pub password: Password,
     pub verificationcode: String,
     pub activated: bool,
 }
@@ -45,8 +45,8 @@ pub struct PaymentInfo {
 }
 
 #[derive(FromRow, Debug, Serialize, Deserialize)]
-pub struct Payments<'a> {
-    pub customeremail: EmailAddress<'a>,
+pub struct Payments {
+    pub customeremail: EmailAddress,
     pub transactionhash: String,
     pub asset: Asset,
     pub amount: String,
@@ -57,8 +57,8 @@ pub struct Payments<'a> {
 }
 
 #[derive(FromRow, Debug, Serialize, Deserialize)]
-pub struct Api<'a> {
-    pub customeremail: EmailAddress<'a>,
+pub struct Api {
+    pub customeremail: EmailAddress,
     pub apikey: String,
 }
 

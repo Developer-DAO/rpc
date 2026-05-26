@@ -1,6 +1,6 @@
 use super::{
     siwe::Siwe,
-    types::{Claims, EmailAddress, JWT_KEY, Password, SiweNonce},
+    types::{Claims, EmailAddress, JWT_KEY, SiweNonce},
 };
 use crate::{
     database::{
@@ -22,23 +22,24 @@ use siwe::{Message, VerificationError, VerificationOpts};
 use sqlx::prelude::FromRow;
 use thiserror::Error;
 use time::OffsetDateTime;
+use sstr::Str;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct LoginRequest<'a> {
-    pub(crate) email: EmailAddress<'a>,
-    pub(crate) password: Password<'a>,
+pub struct LoginRequest {
+    pub(crate) email: Str<256>,
+    pub(crate) password: Str<256>,
 }
 
 #[derive(FromRow)]
-pub struct SiweLogin<'a> {
-    pub email: EmailAddress<'a>,
+pub struct SiweLogin {
+    pub email: EmailAddress,
     pub wallet: Option<String>,
     pub role: Role,
-    pub nonce: SiweNonce<'a>,
+    pub nonce: SiweNonce,
 }
 
 pub async fn refresh(
-    Extension(jwt): Extension<JWTClaims<Claims<'_>>>,
+    Extension(jwt): Extension<JWTClaims<Claims>>,
 ) -> Result<impl IntoResponse, LoginError> {
     let user = sqlx::query_as!(
         Customers,
@@ -95,7 +96,7 @@ pub async fn user_login_siwe(Json(payload): Json<Siwe>) -> Result<impl IntoRespo
 
     let verification_opts = VerificationOpts {
         domain: Some(domain.parse().unwrap()),
-        nonce: Some(customer.nonce.to_string()),
+        nonce: Some(customer.nonce.0.to_string()),
         timestamp: Some(OffsetDateTime::now_utc()),
         rpc_provider: Some(rpc),
     };
@@ -117,12 +118,12 @@ pub async fn user_login_siwe(Json(payload): Json<Siwe>) -> Result<impl IntoRespo
         HeaderValue::from_str(&format!("jwt={auth}; Secure; HttpOnly; SameSite=None")).unwrap(),
     );
 
-    Ok((StatusCode::OK, headers, customer.email.to_string()))
+    Ok((StatusCode::OK, headers, customer.email.0.to_string()))
 }
 
-#[tracing::instrument(skip(payload), fields(email = %payload.email))]
+#[tracing::instrument(skip(payload), fields(email = %payload.email.as_str()))]
 pub async fn user_login(
-    Json(payload): Json<LoginRequest<'_>>,
+    Json(payload): Json<LoginRequest>,
 ) -> Result<impl IntoResponse, LoginError> {
     let db = RELATIONAL_DATABASE.get().unwrap();
     let mut tx = db.begin().await?;
@@ -202,6 +203,7 @@ impl IntoResponse for LoginError {
 pub mod tests {
     use hex::ToHex;
     use jwt_simple::algorithms::{HS256Key, MACLike};
+    use sstr::Str;
 
     #[test]
     fn get_key() -> Result<(), Box<dyn std::error::Error>> {
@@ -220,7 +222,7 @@ pub mod tests {
             activate::{ActivationRequest, activate_account},
             api_keys::generate_api_keys,
             login::LoginRequest,
-            types::{EmailAddress, Password, RegisterUser},
+            types::RegisterUser,
         },
         user_login,
     };
@@ -250,8 +252,8 @@ pub mod tests {
         reqwest::Client::new()
             .post("http://localhost:3030/api/register")
             .json(&RegisterUser {
-                email: "abc@aol.com".to_string(),
-                password: "test".to_string(),
+                email: Str::new("abc@aol.com"),
+                password: Str::new("test"),
             })
             .send()
             .await
@@ -276,8 +278,8 @@ pub mod tests {
         tx.commit().await.unwrap();
 
         let ar = ActivationRequest {
-            code: code.verificationcode,
-            email: "abc@aol.com".to_string(),
+            code: Str::new(&code.verificationcode),
+            email: Str::new("abc@aol.com"),
         };
 
         reqwest::Client::new()
@@ -288,8 +290,8 @@ pub mod tests {
             .unwrap();
 
         let lr = LoginRequest {
-            email: EmailAddress("abc@aol.com".into()),
-            password: Password("test".into()),
+            email: Str::new("abc@aol.com"),
+            password: Str::new("test"),
         };
 
         let ddrpc_client = reqwest::Client::builder()

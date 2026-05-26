@@ -3,6 +3,7 @@ use crate::middleware::jwt_auth::verify_jwt;
 #[cfg(not(feature = "dev"))]
 use crate::middleware::rpc_service::validate_subscription_and_update_user_calls;
 use crate::routes::payment::{cancel, downgrade, upgrade};
+use crate::routes::relayer::router::{route_arb, route_base, route_bsc, route_eth, route_op, route_poly, route_solana, route_sui};
 use crate::routes::relayer::websockets::ws_handler;
 use crate::routes::token_queries::{
     aggregate_balances, aggregate_single_token_bals, aggregate_token_bals_for_user,
@@ -15,7 +16,6 @@ use crate::routes::{
     login::user_login,
     recovery::{recover_password_email, update_password},
     register::register_user,
-    relayer::router::route_call,
 };
 use axum::extract::DefaultBodyLimit;
 use axum::http::HeaderValue;
@@ -71,7 +71,14 @@ async fn main() {
         .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION, header::COOKIE]);
 
     let relayer = Router::new()
-        .route("/rpc/{chain}/{api_key}", post(route_call))
+        .route("/rpc/poly/{api_key}", post(route_poly))
+        .route("/rpc/bsc/{api_key}", post(route_bsc))
+        .route("/rpc/arb-one/{api_key}", post(route_arb))
+        .route("/rpc/base/{api_key}", post(route_base))
+        .route("/rpc/op/{api_key}", post(route_op))
+        .route("/rpc/eth/{api_key}", post(route_eth))
+        .route("/rpc/solana/{api_key}", post(route_solana))
+        .route("/rpc/sui/{api_key}", post(route_sui))
         .route("/ws/{chain}/{api_key}", axum::routing::any(ws_handler));
 
     #[cfg(not(feature = "dev"))]

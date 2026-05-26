@@ -1875,6 +1875,7 @@ dependencies = [
  "serde_json",
  "siwe",
  "sqlx",
+ "sstr",
  "thiserror",
  "time",
  "tokio",
@@ -5142,6 +5143,16 @@ dependencies = [
  "tracing",
  "url",
  "uuid",
+]
+
+[[package]]
+name = "sstr"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "769151c8aac7e5b1c576fbb573e1bc139dc92cbd4c83e3fb8ebc2c42a131b220"
+dependencies = [
+ "serde",
+ "sqlx",
 ]
 
 [[package]]
