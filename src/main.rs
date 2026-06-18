@@ -3,7 +3,9 @@ use crate::middleware::jwt_auth::verify_jwt;
 #[cfg(not(feature = "dev"))]
 use crate::middleware::rpc_service::validate_subscription_and_update_user_calls;
 use crate::routes::payment::{cancel, downgrade, upgrade};
-use crate::routes::relayer::router::{route_arb, route_base, route_bsc, route_eth, route_op, route_poly, route_solana, route_sui};
+use crate::routes::relayer::router::{
+    route_arb, route_base, route_bsc, route_eth, route_op, route_poly, route_solana, route_sui,
+};
 use crate::routes::relayer::websockets::ws_handler;
 use crate::routes::token_queries::{
     aggregate_balances, aggregate_single_token_bals, aggregate_token_bals_for_user,

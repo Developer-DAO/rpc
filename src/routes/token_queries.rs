@@ -162,11 +162,18 @@ pub async fn aggregate_single_token_bals(
     Ok((StatusCode::OK, serde_json::to_string(&res)?).into_response())
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct NftCollectionPagination {
+    collection: Address,
+    offset: u16,
+    limit: u16
+}
+
 pub async fn get_batch_nft_info(
     Path((chain, api_key)): Path<(PoktChains, String)>,
-    Query((collection, offset, limit)): Query<(Address, u16, u16)>,
+    Json(query): Json<NftCollectionPagination>,
 ) -> Result<impl IntoResponse, QueryError> {
-    if limit > 10000 {
+    if query.limit > 10000 {
         Err(QueryError::NFTQueryLimit)?
     }
 
@@ -186,7 +193,7 @@ pub async fn get_batch_nft_info(
     let contract = TokenQueryContractInstance::new(c_addr, provider);
 
     let res = contract
-        .getBatchNftInfo(collection, U256::from(offset), U256::from(limit))
+        .getBatchNftInfo(query.collection, U256::from(query.offset), U256::from(query.limit))
         .call()
         .await?;
 
