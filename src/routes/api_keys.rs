@@ -6,7 +6,10 @@ use axum::{
     response::IntoResponse,
 };
 use jwt_simple::claims::JWTClaims;
-use rand::{RngExt, rng};
+use rand::{
+    distr::{Distribution, Uniform},
+    rng,
+};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -16,7 +19,7 @@ pub struct KeygenLimit {
 }
 
 pub async fn generate_api_keys(
-    Extension(jwt): Extension<JWTClaims<Claims<'static>>>,
+    Extension(jwt): Extension<JWTClaims<Claims>>,
 ) -> Result<impl IntoResponse, ApiKeyError> {
     let keys = sqlx::query_as!(
         KeygenLimit,
@@ -51,7 +54,7 @@ pub struct Keys {
 
 #[tracing::instrument]
 pub async fn get_all_api_keys(
-    Extension(jwt): Extension<JWTClaims<Claims<'_>>>,
+    Extension(jwt): Extension<JWTClaims<Claims>>,
 ) -> Result<impl IntoResponse, ApiKeyError> {
     let keys: Vec<Keys> = sqlx::query_as!(
         Keys,
@@ -97,17 +100,14 @@ impl IntoResponse for ApiKeyError {
 
 #[inline]
 pub fn generate_api_key(size: usize) -> String {
-    rng()
-        .random_iter()
+    let range = Uniform::new_inclusive(97, 122).unwrap();
+    let mut rng = rng();
+
+    range
+        .sample_iter(&mut rng)
         .take(size)
-        // 32-126 are the printable ASCII characters
-        .map(|e: u8| (e % 94) + 32)
         .fold(String::with_capacity(size), |mut acc, e| {
-            acc.push(e as char);
+            acc.push(char::from_u32(e).unwrap());
             acc
         })
 }
-
-// limits for API key generation to avoid abuse
-//
-// maybe scope api key permissions in the future

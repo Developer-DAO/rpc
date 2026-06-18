@@ -151,8 +151,8 @@ pub struct UserBalances {
     balance: i64,
 }
 
-pub async fn get_calls_and_balance<'a>(
-    Extension(jwt): Extension<JWTClaims<Claims<'a>>>,
+pub async fn get_calls_and_balance(
+    Extension(jwt): Extension<JWTClaims<Claims>>,
 ) -> Result<impl IntoResponse, PaymentError> {
     let res = sqlx::query_as!(
         UserBalances,
@@ -170,8 +170,8 @@ pub async fn get_calls_and_balance<'a>(
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct PaymentData<'a> {
-    pub customeremail: EmailAddress<'a>,
+pub struct PaymentData {
+    pub customeremail: EmailAddress,
     pub transactionhash: String,
     pub asset: Asset,
     pub amount: String,
@@ -181,9 +181,9 @@ pub struct PaymentData<'a> {
     pub decimals: i32,
 }
 
-pub async fn get_payments<'a>(
+pub async fn get_payments(
     Query(params): Query<Pagination>,
-    Extension(jwt): Extension<JWTClaims<Claims<'a>>>,
+    Extension(jwt): Extension<JWTClaims<Claims>>,
 ) -> Result<impl IntoResponse, PaymentError> {
     let res: Vec<Payments> = sqlx::query_as!(
         Payments,
@@ -223,7 +223,7 @@ pub struct Cancel {
 
 /// cancels a user's subscription
 pub async fn cancel(
-    Extension(jwt): Extension<JWTClaims<Claims<'_>>>,
+    Extension(jwt): Extension<JWTClaims<Claims>>,
 ) -> Result<impl IntoResponse, PaymentError> {
     let mut tx = RELATIONAL_DATABASE.get().unwrap().begin().await?;
 
@@ -256,7 +256,7 @@ pub struct RpcPlan {
 
 /// Downgrades the service tier for active plan next cycle
 pub async fn downgrade(
-    Extension(jwt): Extension<JWTClaims<Claims<'_>>>,
+    Extension(jwt): Extension<JWTClaims<Claims>>,
     Json(payload): Json<Downgrade>,
 ) -> Result<impl IntoResponse, PaymentError> {
     let mut tx = RELATIONAL_DATABASE.get().unwrap().begin().await?;
@@ -290,7 +290,7 @@ pub async fn downgrade(
 }
 
 pub async fn upgrade(
-    Extension(jwt): Extension<JWTClaims<Claims<'_>>>,
+    Extension(jwt): Extension<JWTClaims<Claims>>,
     Json(payload): Json<Upgrade>,
 ) -> Result<impl IntoResponse, PaymentError> {
     let mut tx = RELATIONAL_DATABASE.get().unwrap().begin().await?;
@@ -358,7 +358,7 @@ pub static D_D_CLOUD_API_KEY: LazyLock<&'static str> =
 
 #[tracing::instrument]
 pub async fn process_ethereum_payment(
-    Extension(jwt): Extension<JWTClaims<Claims<'_>>>,
+    Extension(jwt): Extension<JWTClaims<Claims>>,
     Json(payload): Json<EthereumPayment>,
 ) -> Result<impl IntoResponse, PaymentError> {
     #[cfg(not(test))]
@@ -583,7 +583,7 @@ async fn stablecoin_fixedpoint_conversion(
     Ok(value)
 }
 
-async fn insert_payment(payment: &Payments<'_>) -> Result<(), PaymentError> {
+async fn insert_payment(payment: &Payments) -> Result<(), PaymentError> {
     // append only -- isolated
     let db_connection = RELATIONAL_DATABASE.get().unwrap();
     sqlx::query!(
@@ -604,7 +604,7 @@ async fn insert_payment(payment: &Payments<'_>) -> Result<(), PaymentError> {
 }
 
 async fn credit_account(
-    email: &EmailAddress<'_>,
+    email: &EmailAddress,
     mut amount: i64,
     plan: Option<Plan>,
 ) -> Result<(), PaymentError> {
@@ -713,7 +713,7 @@ mod tests {
             activate::{ActivationRequest, activate_account},
             api_keys::generate_api_keys,
             login::LoginRequest,
-            types::{EmailAddress, Password, RegisterUser},
+            types::RegisterUser,
         },
         user_login,
     };
@@ -721,6 +721,7 @@ mod tests {
     use axum::{Router, middleware::from_fn, routing::post};
     use dotenvy::dotenv;
     use std::time::Duration;
+    use sstr::Str;
 
     #[tokio::test]
     async fn test_payment() {
@@ -790,8 +791,8 @@ mod tests {
         let _reg_res = reqwest::Client::new()
             .post("http://localhost:3072/api/register")
             .json(&RegisterUser {
-                email: "cloud@developerdao.com".to_string(),
-                password: "test".to_string(),
+                email: Str::new("cloud@developerdao.com"),
+                password: Str::new("test"),
             })
             .send()
             .await
@@ -816,8 +817,8 @@ mod tests {
         .unwrap();
 
         let ar = ActivationRequest {
-            code: code.verificationcode,
-            email: "cloud@developerdao.com".to_string(),
+            code: Str::new(&code.verificationcode),
+            email: Str::new("cloud@developerdao.com"),
         };
         println!("Signer Address: {}", signer.address());
         sqlx::query!(
@@ -837,8 +838,8 @@ mod tests {
             .unwrap();
 
         let lr = LoginRequest {
-            email: EmailAddress("cloud@developerdao.com".into()),
-            password: Password("test".into()),
+            email: Str::new("cloud@developerdao.com"),
+            password: Str::new("test"),
         };
 
         let ddrpc_client = reqwest::Client::builder()

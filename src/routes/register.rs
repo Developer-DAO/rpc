@@ -208,8 +208,8 @@ pub mod test {
         let res = reqwest::Client::new()
             .post("http://localhost:3111/api/register")
             .json(&RegisterUser {
-                email: to.to_string(),
-                password: "test".to_string(),
+                email: sstr::Str::new(&to),
+                password: sstr::Str::new("test"),
             })
             .send()
             .await

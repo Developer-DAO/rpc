@@ -3,127 +3,53 @@ use alloy::primitives::Address;
 use axum::{http::StatusCode, response::IntoResponse};
 use jwt_simple::algorithms::HS256Key;
 use serde::{Deserialize, Serialize};
-use std::borrow::Cow;
+use sstr::Str;
 use std::error::Error;
 use std::sync::OnceLock;
+
 pub static JWT_KEY: OnceLock<HS256Key> = OnceLock::new();
 pub static SERVER_EMAIL: OnceLock<EmailLogin> = OnceLock::new();
 
-/// Does not support generic or regular structs
-/// Works for new type structs with one inner type regardless of lifetimes
-/// Inner types must implement sqlx::Type
-/// Supports doc comments and derive macros
-macro_rules! PgNewType {
-    ($($(#[doc = $doc:expr])* $(#[derive($($trait:ty),+)])? $visibility:vis struct $newtype:ident$(<$lt:lifetime>)?($inner_vis:vis $type:ty);)*) => {
-        use sqlx::{Type, Decode};
-        use std::fmt::Display;
-        $(
-             $(#[doc = $doc])*
-             $(#[derive($($trait,)+)])?
-             $visibility struct $newtype$(<$lt>)?($inner_vis $type);
+#[derive(Debug, PartialEq, Eq, Deserialize, Serialize, Clone, sqlx::Type)]
+pub struct EmailAddress(pub String);
 
-             impl$(<$lt>)? Display for $newtype$(<$lt>)? {
-                fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                    self.0.fmt(f)
-                }
-             }
+#[derive(Debug, PartialEq, Eq, Deserialize, Serialize, Clone, sqlx::Type)]
+pub struct Password(pub String);
 
-             impl<'a, DB> sqlx::Decode<'a, DB> for $newtype$(<$lt>)?
-                where DB: sqlx::Database,
-                      $type: Decode<'a, DB>
-             {
-                fn decode(arg: <DB as sqlx::Database>::ValueRef<'a>) -> Result<Self, Box<dyn std::error::Error + Send + Sync + 'static>> {
-                    <$type as sqlx::Decode<DB>>::decode(arg).map(|t| $newtype(t))
-                }
-             }
+#[derive(Debug, PartialEq, Eq, Deserialize, Serialize, Clone, sqlx::Type)]
+pub struct SiweNonce(pub String);
 
-             impl<'a, DB> sqlx::Encode<'a, DB> for $newtype$(<$lt>)?
-                 where
-                     DB: sqlx::Database,
-                    $type: sqlx::Encode<'a, DB>,
-             {
-                fn encode(
-                    self,
-                    buf: &mut <DB as sqlx::Database>::ArgumentBuffer<'a>,
-                ) -> Result<sqlx::encode::IsNull, sqlx::error::BoxDynError>
-                where
-                    Self: Sized,
-                {
-                    <$type as sqlx::Encode<DB>>::encode(self.0, buf)
-                }
-
-                fn encode_by_ref(
-                    &self,
-                    buf: &mut <DB as sqlx::Database>::ArgumentBuffer<'a>,
-                ) -> Result<sqlx::encode::IsNull, sqlx::error::BoxDynError> {
-                    <$type as sqlx::Encode<DB>>::encode(self.0.clone(), buf)
-                }
-            }
-
-            impl<$($lt,)?DB> Type<DB> for $newtype$(<$lt>)?
-                where DB: sqlx::Database,
-                    $type: Type<DB>
-            {
-                fn type_info() -> <DB as sqlx::Database>::TypeInfo {
-                    <$type as Type<DB>>::type_info()
-                }
-            }
-
-        )+
-    }
-}
-
-PgNewType! {
-    #[derive(Debug, PartialEq, Eq, Deserialize, Serialize, Clone)]
-    pub struct EmailAddress<'a>(pub Cow<'a, str>);
-
-    #[derive(Debug, PartialEq, Eq, Deserialize, Serialize, Clone)]
-    pub struct Password<'a>(pub Cow<'a, str>);
-
-    #[derive(Debug, PartialEq, Eq, Deserialize, Serialize, Clone)]
-    pub struct SiweNonce<'a>(pub Cow<'a, str>);
-}
-
-// impl From<String> for PraiseKek {
-//     fn from(value: String) -> Self {
-//         PraiseKek(
-//             OffsetDateTime::parse(&value, &Rfc3339)
-//                 .expect("Date is not Rfc3339 compliant"),
-//         )
-//     }
-// }
-
-impl<'a> Password<'a> {
-    pub fn as_bytes(&'a self) -> &'a [u8] {
+impl Password {
+    pub fn as_bytes(&self) -> &[u8] {
         self.0.as_bytes()
     }
-    pub fn as_str(&'a self) -> &'a str {
-        &self.0
-    }
-}
-
-/// an email address that is not guarateed to be valid
-impl<'a> EmailAddress<'a> {
     pub fn as_str(&self) -> &str {
         &self.0
     }
 }
 
-impl<'a> From<String> for EmailAddress<'a> {
-    fn from(value: String) -> Self {
-        EmailAddress(value.into())
+/// an email address that is not guarateed to be valid
+impl EmailAddress {
+    pub fn as_str(&self) -> &str {
+        &self.0
     }
 }
 
-impl<'a> From<String> for Password<'a> {
+impl From<String> for EmailAddress {
     fn from(value: String) -> Self {
-        Password(value.into())
+        EmailAddress(value)
     }
 }
 
-impl<'a> From<String> for SiweNonce<'a> {
+impl From<String> for Password {
     fn from(value: String) -> Self {
-        SiweNonce(value.into())
+        Password(value)
+    }
+}
+
+impl From<String> for SiweNonce {
+    fn from(value: String) -> Self {
+        SiweNonce(value)
     }
 }
 
@@ -139,9 +65,9 @@ impl JWTKey {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Claims<'a> {
+pub struct Claims {
     pub role: Role,
-    pub email: EmailAddress<'a>,
+    pub email: EmailAddress,
     pub wallet: Option<Address>,
 }
 
@@ -165,8 +91,8 @@ impl EmailLogin {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RegisterUser {
-    pub email: String,
-    pub password: String,
+    pub email: Str<256>,
+    pub password: Str<256>,
 }
 
 impl IntoResponse for RegisterUser {

@@ -1,28 +1,35 @@
 use super::types::RelayErrors;
 use crate::routes::relayer::types::{PoktChains, Relayer};
-use axum::{body::Bytes, extract::Path, http::StatusCode, response::IntoResponse};
+use axum::{body::Bytes, http::StatusCode, response::IntoResponse};
 use thiserror::Error;
 
-pub async fn route_call(
-    Path(route_info): Path<[String; 2]>,
-    body: Bytes,
-) -> Result<impl IntoResponse, RouterErrors> {
-    let raw_destination = route_info
-        .first()
-        .ok_or_else(|| RouterErrors::DestinationError)?;
-    let dest = raw_destination.parse::<PoktChains>()?;
-    let result = dest.relay_transaction(body).await?;
-    Ok((StatusCode::OK, result))
+macro_rules! route {
+    ($($i:ident = $t:expr)+) => {
+        $(
+             pub async fn $i(
+                body: Bytes,
+            ) -> Result<impl IntoResponse, RouterErrors> {
+                Ok((StatusCode::OK, $t.relay_transaction(body).await?))
+            }
+        )+
+    }
+}
+
+route! {
+    route_arb = PoktChains::ArbOne
+    route_op = PoktChains::Op
+    route_sui = PoktChains::Sui
+    route_poly = PoktChains::Poly
+    route_solana = PoktChains::Solana
+    route_base = PoktChains::Base
+    route_eth = PoktChains::Eth
+    route_bsc = PoktChains::Bsc
 }
 
 #[derive(Debug, Error)]
 pub enum RouterErrors {
-    #[error("Could not parse destination from the first Path parameter")]
-    DestinationError,
     #[error(transparent)]
     Relay(#[from] RelayErrors),
-    #[error("malformed payload")]
-    NotJsonRpc,
 }
 
 impl IntoResponse for RouterErrors {
@@ -47,7 +54,7 @@ pub mod test {
         .as_bytes();
 
         let bytes = axum::body::Bytes::from_static(body);
-        let chain = "anvil";
+        let chain = "base";
         let dest = chain.parse::<PoktChains>().unwrap();
         let res = dest.relay_transaction(bytes).await;
         assert!(res.is_ok());

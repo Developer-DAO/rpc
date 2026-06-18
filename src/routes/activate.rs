@@ -5,8 +5,8 @@ use thiserror::Error;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ActivationRequest {
-    pub email: String,
-    pub code: String,
+    pub email: sstr::Str<256>,
+    pub code: sstr::Str<8>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -33,7 +33,7 @@ pub async fn activate_account(
         Err(ActivationError::AlreadyActivated)?
     }
 
-    if payload.code != code.verificationcode {
+    if payload.code.as_str() != code.verificationcode.as_str() {
         Err(ActivationError::InvalidCode)?
     }
 

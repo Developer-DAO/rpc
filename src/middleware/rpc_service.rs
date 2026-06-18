@@ -11,16 +11,16 @@ use thiserror::Error;
 use time::OffsetDateTime;
 use tracing::{info, warn};
 
-pub struct Credits<'a> {
+pub struct Credits {
     calls: i64,
-    email: EmailAddress<'a>,
+    email: EmailAddress,
     plan: Plan,
     expires: OffsetDateTime,
 }
 
 #[tracing::instrument(skip(request))]
 pub async fn validate_subscription_and_update_user_calls(
-    Path(key): Path<[String; 2]>,
+    Path(key): Path<sstr::Str<64>>,
     request: Request,
     next: Next,
 ) -> Result<impl IntoResponse, RpcAuthErrors> {
@@ -33,7 +33,7 @@ pub async fn validate_subscription_and_update_user_calls(
             WHERE
             email = (SELECT customerEmail FROM Api WHERE apiKey = $1) 
         "#,
-        key.get(1).ok_or_else(|| RpcAuthErrors::InvalidApiKey)?
+        &key
     )
     .fetch_optional(db_connection)
     .await?
@@ -68,8 +68,8 @@ pub async fn validate_subscription_and_update_user_calls(
 }
 
 #[derive(Debug)]
-pub struct RenewInfo<'a> {
-    email: EmailAddress<'a>,
+pub struct RenewInfo {
+    email: EmailAddress,
     plan: Plan,
     balance: i64,
     downgradeto: Option<Plan>,
