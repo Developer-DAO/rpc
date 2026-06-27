@@ -1,6 +1,6 @@
 use crate::routes::relayer::types::PoktChains;
 use axum::extract::ws::{CloseFrame, Message, Utf8Bytes, WebSocket};
-use axum::extract::{Path, WebSocketUpgrade};
+use axum::extract::WebSocketUpgrade;
 use axum::response::IntoResponse;
 use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::{SinkExt, StreamExt};
@@ -21,7 +21,7 @@ macro_rules! ws_route {
             pub async fn $i(
                 ws: WebSocketUpgrade,
             ) -> Result<axum::response::Response, WsError> {
-                Ok(ws_handler(ws, $t).await?)
+                ws_handler(ws, $t).await
             }
         )+
     }
