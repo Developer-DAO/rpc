@@ -10,6 +10,7 @@ use axum::{
 use thiserror::Error;
 use time::OffsetDateTime;
 use tracing::{info, warn};
+use sstr::Str;
 
 pub struct Credits {
     calls: i64,
@@ -20,7 +21,7 @@ pub struct Credits {
 
 #[tracing::instrument(skip(request))]
 pub async fn validate_subscription_and_update_user_calls(
-    Path(key): Path<sstr::Str<64>>,
+    Path(key): Path<Str<64>>,
     request: Request,
     next: Next,
 ) -> Result<impl IntoResponse, RpcAuthErrors> {

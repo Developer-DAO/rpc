@@ -6,7 +6,9 @@ use crate::routes::payment::{cancel, downgrade, upgrade};
 use crate::routes::relayer::router::{
     route_arb, route_base, route_bsc, route_eth, route_op, route_poly, route_solana, route_sui,
 };
-use crate::routes::relayer::websockets::ws_handler;
+use crate::routes::relayer::websockets::{
+    ws_route_arb, ws_route_base, ws_route_bsc, ws_route_eth, ws_route_op, ws_route_poly,
+};
 use crate::routes::token_queries::{
     aggregate_balances, aggregate_single_token_bals, aggregate_token_bals_for_user,
     get_batch_nft_info,
@@ -22,7 +24,7 @@ use crate::routes::{
 use axum::extract::DefaultBodyLimit;
 use axum::http::HeaderValue;
 use axum::http::Method;
-use axum::routing::delete;
+use axum::routing::{any, delete};
 use axum::{
     Router,
     http::{StatusCode, header},
@@ -81,7 +83,12 @@ async fn main() {
         .route("/rpc/eth/{api_key}", post(route_eth))
         .route("/rpc/solana/{api_key}", post(route_solana))
         .route("/rpc/sui/{api_key}", post(route_sui))
-        .route("/ws/{chain}/{api_key}", axum::routing::any(ws_handler));
+        .route("/ws/poly/{api_key}", any(ws_route_poly))
+        .route("/ws/bsc/{api_key}", any(ws_route_bsc))
+        .route("/ws/arb-one/{api_key}", any(ws_route_arb))
+        .route("/ws/base/{api_key}", any(ws_route_base))
+        .route("/ws/op/{api_key}", any(ws_route_op))
+        .route("/ws/eth/{api_key}", any(ws_route_eth));
 
     #[cfg(not(feature = "dev"))]
     let relayer = relayer.route_layer(from_fn(validate_subscription_and_update_user_calls));

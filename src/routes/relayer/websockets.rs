@@ -15,16 +15,33 @@ use tokio_tungstenite::{
 };
 use tracing::{debug, info, warn};
 
+macro_rules! ws_route {
+    ($($i:ident = $t:expr)+) => {
+        $(
+            pub async fn $i(
+                ws: WebSocketUpgrade,
+            ) -> Result<axum::response::Response, WsError> {
+                Ok(ws_handler(ws, $t).await?)
+            }
+        )+
+    }
+}
+
+ws_route! {
+    ws_route_arb = PoktChains::ArbOne
+    ws_route_op = PoktChains::Op
+    ws_route_sui = PoktChains::Sui
+    ws_route_poly = PoktChains::Poly
+    ws_route_solana = PoktChains::Solana
+    ws_route_base = PoktChains::Base
+    ws_route_eth = PoktChains::Eth
+    ws_route_bsc = PoktChains::Bsc
+}
+
 pub async fn ws_handler(
     ws: WebSocketUpgrade,
-    path: Path<[String; 2]>,
+    chain: PoktChains,
 ) -> Result<axum::response::Response, WsError> {
-    let path = path
-        .first()
-        .ok_or(WsError::MissingRoute)?
-        .parse::<PoktChains>()
-        .map_err(|_| WsError::InvalidRoute)?;
-
     let ws = ws.max_message_size(1024 * 1024);
     let res = ws.on_upgrade(async move |user_socket| {
         let (user_tx, mut user_rv): (SplitSink<WebSocket, Message>, SplitStream<WebSocket>) =
@@ -44,7 +61,7 @@ pub async fn ws_handler(
             mpsc::UnboundedReceiver<Command>,
         ) = mpsc::unbounded_channel();
         handle_user_msgs(cleanup_rx, user_rv, shutdown_tx).await;
-        handle_ws_conn(path, shutdown_rx, cleanup_tx, sub_info, user_tx).await;
+        handle_ws_conn(chain, shutdown_rx, cleanup_tx, sub_info, user_tx).await;
     });
     Ok(res)
 }
