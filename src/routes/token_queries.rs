@@ -83,7 +83,7 @@ pub async fn aggregate_balances(
         chain,
         PoktChains::Op | PoktChains::Bsc | PoktChains::Sui | PoktChains::Solana
     ) {
-        return Err(QueryError::ChainError)?;
+        Err(QueryError::ChainError)?
     }
 
     let endpoint: String = format!("https://api.cloud.developerdao.com/rpc/{chain}/{api_key}");
@@ -112,7 +112,7 @@ pub async fn aggregate_token_bals_for_user(
         chain,
         PoktChains::Op | PoktChains::Bsc | PoktChains::Sui | PoktChains::Solana
     ) {
-        return Err(QueryError::ChainError)?;
+        Err(QueryError::ChainError)?
     }
 
     let endpoint: String = format!("https://api.cloud.developerdao.com/rpc/{chain}/{api_key}");
@@ -144,7 +144,7 @@ pub async fn aggregate_single_token_bals(
         chain,
         PoktChains::Op | PoktChains::Bsc | PoktChains::Sui | PoktChains::Solana
     ) {
-        return Err(QueryError::ChainError)?;
+        Err(QueryError::ChainError)?
     }
 
     let endpoint: String = format!("https://api.cloud.developerdao.com/rpc/{chain}/{api_key}");
@@ -181,7 +181,7 @@ pub async fn get_batch_nft_info(
         chain,
         PoktChains::Op | PoktChains::Bsc | PoktChains::Sui | PoktChains::Solana
     ) {
-        return Err(QueryError::ChainError)?;
+        Err(QueryError::ChainError)?;
     }
 
     let endpoint: String = format!("https://api.cloud.developerdao.com/rpc/{chain}/{api_key}");
