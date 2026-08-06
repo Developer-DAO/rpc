@@ -132,6 +132,8 @@ pub enum RegisterUserError {
     SmtpError(#[from] lettre::transport::smtp::Error),
     #[error(transparent)]
     JoinError(#[from] JoinError),
+    #[error("The email supplied is invalid")]
+    InvalidEmail,
 }
 
 impl IntoResponse for RegisterUserError {

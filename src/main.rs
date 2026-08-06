@@ -2,6 +2,7 @@ use crate::middleware::ingress_limits::body_size_limiter;
 use crate::middleware::jwt_auth::verify_jwt;
 #[cfg(not(feature = "dev"))]
 use crate::middleware::rpc_service::validate_subscription_and_update_user_calls;
+use crate::routes::activate::new_activation_code;
 use crate::routes::payment::{cancel, downgrade, upgrade};
 use crate::routes::relayer::router::{
     route_arb, route_base, route_bsc, route_eth, route_op, route_poly, route_solana, route_sui,
@@ -139,6 +140,7 @@ async fn main() {
         )
         .route("/api/register", post(register_user))
         .route("/api/activate", post(activate_account))
+        .route("/api/activate/retry/{email}", post(new_activation_code))
         .route("/api/login", post(user_login))
         .route("/api/login/siwe", post(user_login_siwe))
         .route("/api/recovery", post(update_password))
