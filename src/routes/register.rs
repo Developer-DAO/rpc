@@ -247,7 +247,7 @@ pub mod test {
         let password = dotenvy::var("SMTP_PASSWORD").unwrap();
 
         let user_email = username.parse().unwrap();
-        let server_mailbox: Mailbox = format!("Developer DAO RPC <{}>", &username)
+        let server_mailbox: Mailbox = format!("Developer DAO RPC <{}>", username)
             .parse()
             .unwrap();
 
