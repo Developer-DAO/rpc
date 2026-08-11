@@ -132,6 +132,8 @@ pub enum RegisterUserError {
     SmtpError(#[from] lettre::transport::smtp::Error),
     #[error(transparent)]
     JoinError(#[from] JoinError),
+    #[error("The email supplied is invalid")]
+    InvalidEmail,
 }
 
 impl IntoResponse for RegisterUserError {
@@ -159,7 +161,6 @@ pub mod test {
     };
     use axum::{Router, routing::post};
     use dotenvy::dotenv;
-    use jwt_simple::reexports::rand::SeedableRng;
     use lettre::{
         Message, Transport,
         message::{Mailbox, header::ContentType},
@@ -173,10 +174,10 @@ pub mod test {
 
     #[test]
     fn hash_test() {
+        use argon2::password_hash::rand_core::OsRng;
+
         let hashed_pass: String = {
-            let salt = SaltString::generate(
-                &mut jwt_simple::reexports::rand::rngs::StdRng::from_entropy(),
-            );
+            let salt = SaltString::generate(OsRng);
             Argon2::default()
                 .hash_password("testing_password".as_bytes(), &salt)
                 .unwrap()
@@ -246,7 +247,7 @@ pub mod test {
         let password = dotenvy::var("SMTP_PASSWORD").unwrap();
 
         let user_email = username.parse().unwrap();
-        let server_mailbox: Mailbox = format!("Developer DAO RPC <{}>", &username)
+        let server_mailbox: Mailbox = format!("Developer DAO RPC <{}>", username)
             .parse()
             .unwrap();
 

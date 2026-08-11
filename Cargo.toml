@@ -6,34 +6,34 @@ edition = "2024"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-argon2 = "0.5.2"
-axum = { version = "0.8.3", features = ["ws", "macros"] }
+argon2 = "0.5.3"
+axum = { version = "0.8.9", features = ["ws", "macros"] }
 dotenvy = "0.15.7"
 hex = "0.4.3"
-jwt-simple = { version = "0.12.12", default-features = false, features = ["pure-rust"] }
-lettre = {version = "0.11.4", features = ["rustls-tls"]}
-openssl = {version = "0.10.72", features = ["vendored"]}
-rand = "0.10" 
-serde = {version = "1.0.195", features = ["derive"]}
+jwt-simple = { version = "0.13.0", default-features = false, features = ["pure-rust"] }
+lettre = {version = "0.11.23", features = ["rustls-tls"]}
+openssl = {version = "0.10.81", features = ["vendored"]}
+rand = { version = "0.10.2", features = ["sys_rng"] } 
+serde = {version = "1.0.229", features = ["derive"]}
 siwe = { git = "https://github.com/futex-labs/siwe", rev = "1459e6ab72932bfdba79f4f950000cedebf86496", features = ["alloy", "serde"] }
-sqlx = {version = "0.8", features = ["postgres", "macros", "runtime-tokio", "tls-rustls", "time", "uuid"]}
-time = {version = "0.3.36" , features = ["serde"]}
-tokio = {version = "1.47.1", features = ["rt-multi-thread", "macros"]}
-tokio-test = "0.4.3"
-tower-http = {version = "0.6.9", features = ["cors"]}
+sqlx = {version = "0.9", features = ["postgres", "macros", "runtime-tokio", "tls-rustls", "time", "uuid"]}
+time = {version = "0.3.55" , features = ["serde"]}
+tokio = {version = "1.53.1", features = ["rt-multi-thread", "macros"]}
+tokio-test = "0.4.5"
+tower-http = {version = "0.7.0", features = ["cors"]}
 tracing = "0.1.40"
-tracing-subscriber = "0.3.18"
-alloy = {version = "2.0.4", features = ["node-bindings", "network", "rpc-types"]}
-thiserror = "2.0.18"
-mimalloc = "0.1.45"
+tracing-subscriber = "0.3.23"
+alloy = {version = "2.3.0", features = ["node-bindings", "network", "rpc-types"]}
+thiserror = "2.0.19"
+mimalloc = "0.1.52"
 url = "2.5.8"
-reqwest = { version = "0.13.3", features = ["json", "cookies", "stream"] }
-http-body-util = "0.1"
-serde_json = "1.0.140"
-tokio-tungstenite = { version = "0.29.0", features = ["native-tls"] }
-http = "1.3.1"
-futures-util = "0.3.31"
-sstr = {version = "0.3.0", features = ["sqlx-postgres", "serde"]}
+reqwest = { version = "0.13.4", features = ["json", "cookies", "stream"] }
+http-body-util = "0.1.4"
+serde_json = "1.0.151"
+tokio-tungstenite = { version = "0.30.0", features = ["native-tls"] }
+http = "1.5.0"
+futures-util = "0.3.33"
+sstr = { version = "0.3.1", features = ["sqlx-postgres", "serde"]}
 
 [dev-dependencies]
 alloy = {version = "2.0", features = ["node-bindings", "network", "rpc-types", "signer-local"]}

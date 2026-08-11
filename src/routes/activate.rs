@@ -1,5 +1,14 @@
-use crate::{database::types::RELATIONAL_DATABASE, routes::register::generate_verification_code};
-use axum::{Json, http::StatusCode, response::IntoResponse};
+use crate::{
+    EmailLogin,
+    database::types::RELATIONAL_DATABASE,
+    routes::{register::generate_verification_code, types::SERVER_EMAIL},
+};
+use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
+use lettre::{
+    Message, SmtpTransport, Transport,
+    message::{Mailbox, header::ContentType},
+    transport::smtp::{self, authentication::Credentials},
+};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -13,6 +22,62 @@ pub struct ActivationRequest {
 pub struct ActivationCode {
     pub verificationcode: String,
     pub activated: bool,
+}
+
+#[tracing::instrument]
+pub async fn new_activation_code(
+    Path(email): Path<sstr::Str<256>>,
+) -> Result<impl IntoResponse, ActivationError> {
+    let db = RELATIONAL_DATABASE.get().unwrap();
+
+    let code = sqlx::query_as!(
+        ActivationCode,
+        "SELECT verificationCode, activated FROM Customers where email = $1",
+        &email
+    )
+    .fetch_optional(db)
+    .await?
+    .ok_or_else(|| ActivationError::UserNotFound)?;
+
+    if code.activated {
+        Err(ActivationError::AlreadyActivated)?;
+    }
+
+    let new_code: String = generate_verification_code(8);
+    sqlx::query!(
+        "UPDATE Customers SET verificationCode = $1 WHERE email = $2",
+        &new_code,
+        &email
+    )
+    .execute(db)
+    .await?;
+
+    let server_email_info: &'static EmailLogin = SERVER_EMAIL.get().unwrap();
+    let email_credentials = Credentials::new(
+        server_email_info.address.to_string(),
+        server_email_info.password.to_string(),
+    );
+
+    let server_mailbox: Mailbox =
+        format!("Developer DAO RPC <{}>", server_email_info.address).parse()?;
+    let user_email = email.parse()?;
+
+    let email = Message::builder()
+        .from(server_mailbox)
+        .to(user_email)
+        .subject("D_D RPC Verification Code")
+        .header(ContentType::TEXT_PLAIN)
+        .body(format!("Your verification code is: {new_code}"))?;
+
+    let mailer = SmtpTransport::starttls_relay("smtp.gmail.com")?
+        .credentials(email_credentials)
+        .build();
+
+    let _: smtp::response::Response = mailer
+        .send(&email)
+        .expect("Failed to send verification email)");
+
+    Ok((StatusCode::OK).into_response())
 }
 
 #[tracing::instrument]
@@ -59,14 +124,31 @@ pub enum ActivationError {
     InvalidCode,
     #[error("This account is already activated. Please login.")]
     AlreadyActivated,
+    #[error(transparent)]
+    EmailError(#[from] lettre::transport::smtp::Error),
+    #[error(transparent)]
+    AddressError(#[from] lettre::address::AddressError),
+    #[error(transparent)]
+    LettreError(#[from] lettre::error::Error),
 }
 
 impl IntoResponse for ActivationError {
     fn into_response(self) -> axum::response::Response {
-        (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            self.to_string(),
-        )
-            .into_response()
+        match self {
+            ActivationError::UserNotFound => {
+                (StatusCode::NOT_FOUND, self.to_string()).into_response()
+            }
+            ActivationError::InvalidCode => {
+                (StatusCode::UNAUTHORIZED, self.to_string()).into_response()
+            }
+            ActivationError::AlreadyActivated => {
+                (axum::http::StatusCode::FORBIDDEN, self.to_string()).into_response()
+            }
+            _ => (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                self.to_string(),
+            )
+                .into_response(),
+        }
     }
 }

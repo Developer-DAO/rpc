@@ -84,7 +84,7 @@ impl Relayer for PoktChains {
             let provider = format!(
                 "https://api.cloud.developerdao.com/rpc/{}/{}",
                 self.id(),
-                &api_key
+                api_key
             );
             let byte_stream = PROXY_CLIENT
                 .post(provider)

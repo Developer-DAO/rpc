@@ -32,7 +32,7 @@ fn generate_body() -> (Vec<u8>, String) {
     .to_owned();
 
     let key = dotenvy::var("D_D_CLOUD_API_KEY").expect("D_D_CLOUD_API_KEY");
-    let provider = format!("https://api.cloud.developerdao.com/rpc/base/{}", &key);
+    let provider = format!("https://api.cloud.developerdao.com/rpc/base/{}", key);
 
     (body, provider)
 }
